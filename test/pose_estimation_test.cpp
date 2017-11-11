@@ -4,7 +4,11 @@
 作者:赖立海
 功能描述:通过kinect获得的图像信息,估计机器人的位姿,并作为导
 		 航的初始位姿发布
-流程:步骤1.捕获图像--根据机器人运动信息获取图像
+流程:
+	 步骤0.初始化--读入建图时的所有关键帧及其相应相机位姿，提取特征点，
+	 			   计算描述子，计算词袋向量，这些信息初始化为一个数据库
+	 			   
+	 步骤1.捕获图像--根据机器人运动信息获取图像
 
 	 步骤2.检索相似帧--在所有关键帧中检索与捕获的图像相似的帧
 	 				  (视觉词袋实现) 得到若干相似帧,筛选得分高于阈
@@ -46,8 +50,9 @@ int main(int argc, char** argv)
 	cout<<"initializing... "<<endl;
     localization::Config::setParameterFile ( argv[1] );    
     string map_dir = localization::Config::get<string> ( "map_dir" );
-    string image_query_dir = localization::Config::get<string> ( "image_query_dir" );
+    //string image_query_dir = localization::Config::get<string> ( "image_query_dir" );
     string capture_save_dir_ = localization::Config::get<string> ( "capture_save_dir" );
+    
     
 	localization::PoseEstimation pose_estimation;    
 	pose_estimation.mapInitialization();		//初始化地图
@@ -72,6 +77,7 @@ int main(int argc, char** argv)
     ROS_INFO("Capturer started...");
     Capturer capture(capture_save_dir_);
 
+	int num_image_captured=0;      //捕获成功的图像数量（实际计数的是参与查询的的数量）
 
 	float x = 0.0;
 	float y = 0.0;
@@ -84,6 +90,10 @@ int main(int argc, char** argv)
 	last_time = ros::Time::now();
 	
 	//ros::Rate loop_rate(10);
+	string dir_result_detailed_out(capture_save_dir_+"/result_detailed.txt");
+	string dir_result_simple_out(capture_save_dir_+"/result_simple.txt");
+	ofstream fout(dir_result_detailed_out); //记录详细输出结果
+	ofstream fout1(dir_result_simple_out); //记录简单输出结果
 	
     while( ros::ok() )
     {
@@ -98,24 +108,29 @@ int main(int argc, char** argv)
 		
 		last_time = current_time;
 		
-		x += delta_x;
-		y += delta_y;
-		th += delta_th;
+		x +=abs( delta_x);
+		y +=abs( delta_y);
+		th +=abs(delta_th);
 		
 		dd=sqrt(x*x + y*y);
-		
-		if (dd >= 0.15 || th >= (10/180) * Pi)  //运动距离超过0.15m或者角度超过10度
+		//cout <<"dd: "<<dd<<"   th: "<<th<<endl;
+		if (dd >= 0.10 || th >= (float)(5.0/180.0) * Pi)  //运动距离超过0.15m或者角度超过10度
 		{									   //则可捕获一张图像
 			capture.Enable_ = true;
-			
 			x = 0;
 			y = 0;
 			th = 0;
+			dd = 0;
 		}
+		
+		
 		
 		if(capture.state_)		//图像获取成功,计算相机位姿
 		{
-		
+			capture.state_=false;
+			
+			num_image_captured++;
+			
 			/***根据输入的图像计算当前位姿***/           		 		                     
 		    image_retrieve.frame_query_->color_ = capture.color_;
 		    image_retrieve.frame_query_->depth_ = capture.depth_;   
@@ -129,8 +144,9 @@ int main(int argc, char** argv)
 		  	
 		    image_retrieve.retrieve_result();         
 		//    cout<<"searching for image "<<i<<" returns "<< num_result <<" results" <<endl;
-		    cout<<"searching for image_query "<<" returns "<< num_result <<" results" <<endl;
-		    
+		    cout<<"searching for image_query "<< num_image_captured <<" returns "<< num_result <<" results" <<endl;
+		    fout<<"searching for image_query "<< num_image_captured <<" returns "<< num_result <<" results" <<endl;
+		    fout1<<"result for image_query "<< num_image_captured <<endl;
 		    pose_estimation.map_->map_points_.clear();
 		    
 		    class PoseResult   //表示相机位姿
@@ -153,7 +169,7 @@ int main(int argc, char** argv)
 		    	pose_result.frame_id = image_retrieve.EntryId_frame_id_[image_retrieve.result_[k].Id];        	
 		    	pose_result.score = image_retrieve.result_[k].Score;
 		    	
-		    	if(pose_result.score<0.015)		//得分太低
+		    	if(pose_result.score<0.0150)		//得分太低的不计算运动
 		    	{
 		    		pose_result_vec.push_back(pose_result);
 		    		continue;
@@ -164,7 +180,6 @@ int main(int argc, char** argv)
 					 <<"   frame_id: " << pose_result.frame_id
 					 <<"   score: "  << pose_result.score 
 					 <<endl;
-			   
 			   
 				Mat K = ( Mat_<double> ( 3,3 ) << 525.0, 0, 319.5, 0, 525.0, 239.5, 0, 0, 1 );                 
 				                			 				
@@ -196,7 +211,7 @@ int main(int argc, char** argv)
 				if ( pose_estimation.featureMatching(pose_estimation.curr_, pose_estimation.ref_) ) //匹配成功才做运动估计
 				{
 					pose_estimation.poseEstimationPnP();
-					pose_result.state = pose_estimation.checkEstimatedPose();				
+					pose_result.state = pose_estimation.checkEstimatedPose();	//运动估计结果的状态			
 				}
 					
 				pose_estimation.map_->map_points_.clear();	//清除地图点
@@ -217,8 +232,20 @@ int main(int argc, char** argv)
 			cout <<"result"<<endl;
 			for(int k=0; k<num_result; k++)
 			{
-			
+				/*
 				cout << "result " << k << ":   " 
+					 << "frame_id: " << pose_result_vec[k].frame_id << "   "
+					 << " score: "  << pose_result_vec[k].score << "   "
+					 << "x:"<< pose_result_vec[k].x << "   "
+					 << "y:"<< pose_result_vec[k].y << "   "
+					 << "theta:"<<pose_result_vec[k].theta <<"   "
+					 << "state:"<<pose_result_vec[k].state << endl;					 
+				*/
+ 			    if(pose_result_vec[k].score<0.0150) //得分太低的没有计算运动，结果都是0，不保存
+		    	{
+		    		continue;
+		    	}
+				fout << "result " << k << ":   " 
 					 << "frame_id: " << pose_result_vec[k].frame_id << "   "
 					 << " score: "  << pose_result_vec[k].score << "   "
 					 << "x:"<< pose_result_vec[k].x << "   "
@@ -267,23 +294,47 @@ int main(int argc, char** argv)
 				pose.pose.pose.orientation.x=0;
 				pose.pose.pose.orientation.y=0;						  
 				pose.pose.pose.orientation.z=sin(0.5*pose_theta/num_good_pose);
-				pose.pose.pose.orientation.w=cos(0.5*pose_theta/num_good_pose);				
+				pose.pose.pose.orientation.w=cos(0.5*pose_theta/num_good_pose);
+				
+				cout<<"good pose :" <<" x:" << pose.pose.pose.position.x 	
+									<<"   y:" << pose.pose.pose.position.y 
+									<<"   theta:" << pose.pose.pose.orientation.z
+									<<endl;
+									
+										
+				fout<<"good pose :" <<" x:" << pose.pose.pose.position.x 	
+									<<"   y:" << pose.pose.pose.position.y 
+									<<"   theta:" << pose.pose.pose.orientation.z
+									<<endl;	
+				fout << endl << endl <<endl;
+					
+				fout1<<"good pose :" <<" x:" << pose.pose.pose.position.x 	
+									<<"   y:" << pose.pose.pose.position.y 
+									<<"   theta:" << pose.pose.pose.orientation.z
+									<<endl;	
+				fout1 << endl <<endl;									
 			}
-			else
-				cout << "not find valid similar frame!" <<endl
-					 << "not find valid similar frame!" <<endl
-					 << "not find valid similar frame!" <<endl;
-					 
+			else			 
+			{
+				cout << "not find valid similar frame!" <<endl;
+				cout << endl <<endl;	
+				
+				
+				fout << "not find valid similar frame!" <<endl;
+				fout << endl <<endl << endl ;
+				
+				fout1 << "not find valid similar frame!" <<endl;
+				fout1 << endl << endl ;				
+			} 
+			
 			initial_pose_pub.publish(pose);
 		
 		}
-		
-		
-		
-    	
+ 	
 		//loop_rate.sleep();
   	}
-
+	fout.close();
+	fout1.close();
     return EXIT_SUCCESS;
 }
 
@@ -645,6 +696,535 @@ result 26:   frame_id: 331    score: 0.00690783   x:5.68314   y:-5.4072    theta
 result 27:   frame_id: 17     score: 0.0068879    x:-2.91933  y:0.561363   theta:1.98133   state:0
 result 28:   frame_id: 457    score: 0.00682607   x:-622.976  y:-441.11    theta:1.51505   state:0
 result 29:   frame_id: 266    score: 0.00677521   x:14.3227   y:-1.02441   theta:0.881669  state:0
+
+
+
+
+
+
+
+
+
+
+
+
+[ INFO] [1510385715.153572786]: Saving images
+[ INFO] [1510385715.153833802]: db info 1
+[ INFO] [1510385715.154442472]: db info 2
+RGB 801
+depth 796
+extract keypoints cost time: 0.010369
+extract computeDescriptors cost time: 0.009579
+image retrieve done.
+searching for image_query  returns 20 results
+result
+result 0:   frame_id: 144    score: 0.0115343   x:0   y:0   theta:0   state:0
+result 1:   frame_id: 267    score: 0.0109804   x:0   y:0   theta:0   state:0
+result 2:   frame_id: 197    score: 0.0107532   x:0   y:0   theta:0   state:0
+result 3:   frame_id: 306    score: 0.0105963   x:0   y:0   theta:0   state:0
+result 4:   frame_id: 53    score: 0.0102801   x:0   y:0   theta:0   state:0
+result 5:   frame_id: 1    score: 0.0101397   x:0   y:0   theta:0   state:0
+result 6:   frame_id: 155    score: 0.00930604   x:0   y:0   theta:0   state:0
+result 7:   frame_id: 80    score: 0.00925041   x:0   y:0   theta:0   state:0
+result 8:   frame_id: 52    score: 0.00924555   x:0   y:0   theta:0   state:0
+result 9:   frame_id: 76    score: 0.00880561   x:0   y:0   theta:0   state:0
+result 10:   frame_id: 269    score: 0.00878789   x:0   y:0   theta:0   state:0
+result 11:   frame_id: 263    score: 0.00865759   x:0   y:0   theta:0   state:0
+result 12:   frame_id: 232    score: 0.00860694   x:0   y:0   theta:0   state:0
+result 13:   frame_id: 36    score: 0.00855813   x:0   y:0   theta:0   state:0
+result 14:   frame_id: 128    score: 0.00845718   x:0   y:0   theta:0   state:0
+result 15:   frame_id: 87    score: 0.00828084   x:0   y:0   theta:0   state:0
+result 16:   frame_id: 152    score: 0.00817061   x:0   y:0   theta:0   state:0
+result 17:   frame_id: 317    score: 0.00766044   x:0   y:0   theta:0   state:0
+result 18:   frame_id: 285    score: 0.00756331   x:0   y:0   theta:0   state:0
+result 19:   frame_id: 174    score: 0.00733861   x:0   y:0   theta:0   state:0
+not find valid similar frame!
+not find valid similar frame!
+not find valid similar frame!
+capture.Enable_ = true 
+dd: 0.100002   th: 0.0146551
+ callback cvbrige
+ callback cvbrige enable
+[ INFO] [1510385715.806979215]: Saving images
+[ INFO] [1510385715.807018452]: db info 1
+[ INFO] [1510385715.807388895]: db info 2
+RGB 811
+depth 812
+extract keypoints cost time: 0.00786
+extract computeDescriptors cost time: 0.012438
+image retrieve done.
+searching for image_query  returns 20 results
+result
+result 0:   frame_id: 81    score: 0.0128038   x:0   y:0   theta:0   state:0
+result 1:   frame_id: 324    score: 0.00985493   x:0   y:0   theta:0   state:0
+result 2:   frame_id: 172    score: 0.00948935   x:0   y:0   theta:0   state:0
+result 3:   frame_id: 31    score: 0.00942564   x:0   y:0   theta:0   state:0
+result 4:   frame_id: 40    score: 0.0088545   x:0   y:0   theta:0   state:0
+result 5:   frame_id: 76    score: 0.00835628   x:0   y:0   theta:0   state:0
+result 6:   frame_id: 228    score: 0.00796765   x:0   y:0   theta:0   state:0
+result 7:   frame_id: 182    score: 0.00760807   x:0   y:0   theta:0   state:0
+result 8:   frame_id: 355    score: 0.00757068   x:0   y:0   theta:0   state:0
+result 9:   frame_id: 175    score: 0.00752849   x:0   y:0   theta:0   state:0
+result 10:   frame_id: 319    score: 0.00744803   x:0   y:0   theta:0   state:0
+result 11:   frame_id: 420    score: 0.00736176   x:0   y:0   theta:0   state:0
+result 12:   frame_id: 466    score: 0.00735321   x:0   y:0   theta:0   state:0
+result 13:   frame_id: 69    score: 0.00726397   x:0   y:0   theta:0   state:0
+result 14:   frame_id: 180    score: 0.00726383   x:0   y:0   theta:0   state:0
+result 15:   frame_id: 70    score: 0.00725522   x:0   y:0   theta:0   state:0
+result 16:   frame_id: 18    score: 0.00725116   x:0   y:0   theta:0   state:0
+result 17:   frame_id: 1    score: 0.00723031   x:0   y:0   theta:0   state:0
+result 18:   frame_id: 478    score: 0.00715514   x:0   y:0   theta:0   state:0
+result 19:   frame_id: 388    score: 0.00707371   x:0   y:0   theta:0   state:0
+not find valid similar frame!
+not find valid similar frame!
+not find valid similar frame!
+capture.Enable_ = true 
+dd: 0.1   th: 0.0448896
+ callback cvbrige
+ callback cvbrige enable
+[ INFO] [1510385716.430074799]: Saving images
+[ INFO] [1510385716.430107692]: db info 1
+[ INFO] [1510385716.430655312]: db info 2
+RGB 829
+depth 831
+extract keypoints cost time: 0.007893
+extract computeDescriptors cost time: 0.008948
+image retrieve done.
+searching for image_query  returns 20 results
+result
+result 0:   frame_id: 82    score: 0.0127187   x:0   y:0   theta:0   state:0
+result 1:   frame_id: 80    score: 0.0123598   x:0   y:0   theta:0   state:0
+result 2:   frame_id: 156    score: 0.0109472   x:0   y:0   theta:0   state:0
+result 3:   frame_id: 311    score: 0.0108439   x:0   y:0   theta:0   state:0
+result 4:   frame_id: 340    score: 0.0105163   x:0   y:0   theta:0   state:0
+result 5:   frame_id: 176    score: 0.00959763   x:0   y:0   theta:0   state:0
+result 6:   frame_id: 89    score: 0.00923207   x:0   y:0   theta:0   state:0
+result 7:   frame_id: 84    score: 0.00920599   x:0   y:0   theta:0   state:0
+result 8:   frame_id: 348    score: 0.00907773   x:0   y:0   theta:0   state:0
+result 9:   frame_id: 464    score: 0.00880553   x:0   y:0   theta:0   state:0
+result 10:   frame_id: 356    score: 0.00878365   x:0   y:0   theta:0   state:0
+result 11:   frame_id: 467    score: 0.00849373   x:0   y:0   theta:0   state:0
+result 12:   frame_id: 426    score: 0.00802604   x:0   y:0   theta:0   state:0
+result 13:   frame_id: 264    score: 0.00799802   x:0   y:0   theta:0   state:0
+result 14:   frame_id: 441    score: 0.0079008   x:0   y:0   theta:0   state:0
+result 15:   frame_id: 261    score: 0.00779578   x:0   y:0   theta:0   state:0
+result 16:   frame_id: 255    score: 0.0076482   x:0   y:0   theta:0   state:0
+result 17:   frame_id: 179    score: 0.00757875   x:0   y:0   theta:0   state:0
+result 18:   frame_id: 81    score: 0.00741357   x:0   y:0   theta:0   state:0
+result 19:   frame_id: 46    score: 0.00728175   x:0   y:0   theta:0   state:0
+not find valid similar frame!
+not find valid similar frame!
+not find valid similar frame!
+capture.Enable_ = true 
+dd: 0.1   th: 0.0432207
+ callback cvbrige
+ callback cvbrige enable
+[ INFO] [1510385717.045978256]: Saving images
+[ INFO] [1510385717.046014338]: db info 1
+[ INFO] [1510385717.046282465]: db info 2
+RGB 845
+depth 849
+capture.Enable_ = true 
+dd: 0.101143   th: 0.0418197
+extract keypoints cost time: 0.007568
+extract computeDescriptors cost time: 0.008727
+image retrieve done.
+searching for image_query  returns 20 results
+result
+result 0:   frame_id: 89    score: 0.0119371   x:0   y:0   theta:0   state:0
+result 1:   frame_id: 315    score: 0.0119299   x:0   y:0   theta:0   state:0
+result 2:   frame_id: 409    score: 0.0116333   x:0   y:0   theta:0   state:0
+result 3:   frame_id: 81    score: 0.0112111   x:0   y:0   theta:0   state:0
+result 4:   frame_id: 193    score: 0.0108017   x:0   y:0   theta:0   state:0
+result 5:   frame_id: 78    score: 0.0106892   x:0   y:0   theta:0   state:0
+result 6:   frame_id: 88    score: 0.0106059   x:0   y:0   theta:0   state:0
+result 7:   frame_id: 60    score: 0.0105833   x:0   y:0   theta:0   state:0
+result 8:   frame_id: 319    score: 0.0104557   x:0   y:0   theta:0   state:0
+result 9:   frame_id: 388    score: 0.010271   x:0   y:0   theta:0   state:0
+result 10:   frame_id: 324    score: 0.0099559   x:0   y:0   theta:0   state:0
+result 11:   frame_id: 86    score: 0.0096067   x:0   y:0   theta:0   state:0
+result 12:   frame_id: 348    score: 0.00949405   x:0   y:0   theta:0   state:0
+result 13:   frame_id: 62    score: 0.00925752   x:0   y:0   theta:0   state:0
+result 14:   frame_id: 76    score: 0.00900158   x:0   y:0   theta:0   state:0
+result 15:   frame_id: 432    score: 0.00895284   x:0   y:0   theta:0   state:0
+result 16:   frame_id: 79    score: 0.00887818   x:0   y:0   theta:0   state:0
+result 17:   frame_id: 85    score: 0.00881091   x:0   y:0   theta:0   state:0
+result 18:   frame_id: 306    score: 0.00855925   x:0   y:0   theta:0   state:0
+result 19:   frame_id: 263    score: 0.008411   x:0   y:0   theta:0   state:0
+not find valid similar frame!
+not find valid similar frame!
+not find valid similar frame!
+capture.Enable_ = true 
+dd: 0.1   th: 0.0404647
+ callback cvbrige
+ callback cvbrige enable
+[ INFO] [1510385717.712203937]: Saving images
+[ INFO] [1510385717.712241481]: db info 1
+[ INFO] [1510385717.712529265]: db info 2
+RGB 869
+depth 865
+extract keypoints cost time: 0.007729
+extract computeDescriptors cost time: 0.009066
+image retrieve done.
+searching for image_query  returns 20 results
+result 0   frame_id: 78   score: 0.0154006
+good matches: 41
+match cost time: 0.001907
+pnp inliers: 6
+reject because inlier is too small: 6
+Twc
+-0.145715 -0.259246 -0.954756  -17.1422
+  -0.9893 0.0452251  0.138707   10.4914
+0.00721972  0.964752 -0.263062   7.18452
+        0         0         0         1
+
+
+result
+result 0:   frame_id: 78    score: 0.0154006   x:-17.1422   y:7.18452   theta:2.32098   state:0
+result 1:   frame_id: 311    score: 0.0146339   x:0   y:0   theta:0   state:0
+result 2:   frame_id: 83    score: 0.013738   x:0   y:0   theta:0   state:0
+result 3:   frame_id: 71    score: 0.0124965   x:0   y:0   theta:0   state:0
+result 4:   frame_id: 80    score: 0.0119216   x:0   y:0   theta:0   state:0
+result 5:   frame_id: 309    score: 0.0116311   x:0   y:0   theta:0   state:0
+result 6:   frame_id: 181    score: 0.0113639   x:0   y:0   theta:0   state:0
+result 7:   frame_id: 79    score: 0.0113487   x:0   y:0   theta:0   state:0
+result 8:   frame_id: 90    score: 0.0113384   x:0   y:0   theta:0   state:0
+result 9:   frame_id: 476    score: 0.0104398   x:0   y:0   theta:0   state:0
+result 10:   frame_id: 60    score: 0.0104369   x:0   y:0   theta:0   state:0
+result 11:   frame_id: 87    score: 0.0102477   x:0   y:0   theta:0   state:0
+result 12:   frame_id: 88    score: 0.0101154   x:0   y:0   theta:0   state:0
+result 13:   frame_id: 270    score: 0.0100008   x:0   y:0   theta:0   state:0
+result 14:   frame_id: 418    score: 0.00999971   x:0   y:0   theta:0   state:0
+result 15:   frame_id: 86    score: 0.00985774   x:0   y:0   theta:0   state:0
+result 16:   frame_id: 77    score: 0.00970771   x:0   y:0   theta:0   state:0
+result 17:   frame_id: 56    score: 0.00896509   x:0   y:0   theta:0   state:0
+result 18:   frame_id: 161    score: 0.00884421   x:0   y:0   theta:0   state:0
+result 19:   frame_id: 180    score: 0.00882865   x:0   y:0   theta:0   state:0
+not find valid similar frame!
+not find valid similar frame!
+not find valid similar frame!
+capture.Enable_ = true 
+dd: 0.100002   th: 0.0332339
+ callback cvbrige
+ callback cvbrige enable
+[ INFO] [1510385718.350298493]: Saving images
+[ INFO] [1510385718.350342948]: db info 1
+[ INFO] [1510385718.350869483]: db info 2
+RGB 888
+depth 884
+extract keypoints cost time: 0.008431
+extract computeDescriptors cost time: 0.01151
+image retrieve done.
+searching for image_query  returns 20 results
+result 0   frame_id: 80   score: 0.0167461
+good matches: 55
+match cost time: 0.002166
+pnp inliers: 7
+reject because inlier is too small: 7
+Twc
+  0.670175 -0.0382401  -0.741218 -0.0447638
+ 0.0505473  -0.994002   0.096984   0.304159
+  -0.74048  -0.102463  -0.664222    12.7372
+         0          0          0          1
+
+
+result
+result 0:   frame_id: 80    score: 0.0167461   x:-0.0447638   y:12.7372   theta:3.03222   state:0
+result 1:   frame_id: 90    score: 0.0146362   x:0   y:0   theta:0   state:0
+result 2:   frame_id: 92    score: 0.013595   x:0   y:0   theta:0   state:0
+result 3:   frame_id: 271    score: 0.012827   x:0   y:0   theta:0   state:0
+result 4:   frame_id: 59    score: 0.0127138   x:0   y:0   theta:0   state:0
+result 5:   frame_id: 171    score: 0.011153   x:0   y:0   theta:0   state:0
+result 6:   frame_id: 63    score: 0.0108542   x:0   y:0   theta:0   state:0
+result 7:   frame_id: 10    score: 0.0107177   x:0   y:0   theta:0   state:0
+result 8:   frame_id: 306    score: 0.0105126   x:0   y:0   theta:0   state:0
+result 9:   frame_id: 194    score: 0.010217   x:0   y:0   theta:0   state:0
+result 10:   frame_id: 190    score: 0.0100956   x:0   y:0   theta:0   state:0
+result 11:   frame_id: 48    score: 0.0100053   x:0   y:0   theta:0   state:0
+result 12:   frame_id: 87    score: 0.00970492   x:0   y:0   theta:0   state:0
+result 13:   frame_id: 88    score: 0.00969473   x:0   y:0   theta:0   state:0
+result 14:   frame_id: 161    score: 0.00953108   x:0   y:0   theta:0   state:0
+result 15:   frame_id: 131    score: 0.00934452   x:0   y:0   theta:0   state:0
+result 16:   frame_id: 264    score: 0.00929462   x:0   y:0   theta:0   state:0
+result 17:   frame_id: 152    score: 0.00926462   x:0   y:0   theta:0   state:0
+result 18:   frame_id: 174    score: 0.00925376   x:0   y:0   theta:0   state:0
+result 19:   frame_id: 261    score: 0.00922262   x:0   y:0   theta:0   state:0
+not find valid similar frame!
+not find valid similar frame!
+not find valid similar frame!
+capture.Enable_ = true 
+dd: 0.1   th: 0.0576728
+ callback cvbrige
+ callback cvbrige enable
+[ INFO] [1510385719.048344717]: Saving images
+[ INFO] [1510385719.048415229]: db info 1
+[ INFO] [1510385719.049199418]: db info 2
+RGB 904
+depth 905
+extract keypoints cost time: 0.009076
+extract computeDescriptors cost time: 0.01012
+image retrieve done.
+searching for image_query  returns 20 results
+result 0   frame_id: 89   score: 0.020519
+good matches too small: 7
+Twc
+1 0 0 0
+0 1 0 0
+0 0 1 0
+0 0 0 1
+
+
+result 1   frame_id: 83   score: 0.0182135
+good matches: 52
+match cost time: 0.002675
+pnp inliers: 16
+reject because motion is too large: 18.1622
+Twc
+-0.769973 -0.607369 -0.195565  0.291379
+-0.0620843 -0.233725  0.970319   13.8535
+ -0.63505   0.75926  0.142254   17.3843
+        0         0         0         1
+
+
+result
+result 0:   frame_id: 89    score: 0.020519   x:0   y:0   theta:0   state:0
+result 1:   frame_id: 83    score: 0.0182135   x:0.291379   y:17.3843   theta:2.76718   state:0
+result 2:   frame_id: 306    score: 0.0130594   x:0   y:0   theta:0   state:0
+result 3:   frame_id: 271    score: 0.0123793   x:0   y:0   theta:0   state:0
+result 4:   frame_id: 84    score: 0.0121625   x:0   y:0   theta:0   state:0
+result 5:   frame_id: 181    score: 0.0119079   x:0   y:0   theta:0   state:0
+result 6:   frame_id: 188    score: 0.0117324   x:0   y:0   theta:0   state:0
+result 7:   frame_id: 80    score: 0.0114695   x:0   y:0   theta:0   state:0
+result 8:   frame_id: 79    score: 0.0113174   x:0   y:0   theta:0   state:0
+result 9:   frame_id: 310    score: 0.0113067   x:0   y:0   theta:0   state:0
+result 10:   frame_id: 302    score: 0.0108206   x:0   y:0   theta:0   state:0
+result 11:   frame_id: 267    score: 0.0105449   x:0   y:0   theta:0   state:0
+result 12:   frame_id: 98    score: 0.0103138   x:0   y:0   theta:0   state:0
+result 13:   frame_id: 49    score: 0.0102841   x:0   y:0   theta:0   state:0
+result 14:   frame_id: 88    score: 0.0100564   x:0   y:0   theta:0   state:0
+result 15:   frame_id: 189    score: 0.0100305   x:0   y:0   theta:0   state:0
+result 16:   frame_id: 82    score: 0.0098194   x:0   y:0   theta:0   state:0
+result 17:   frame_id: 180    score: 0.00959533   x:0   y:0   theta:0   state:0
+result 18:   frame_id: 90    score: 0.00952972   x:0   y:0   theta:0   state:0
+result 19:   frame_id: 322    score: 0.00911411   x:0   y:0   theta:0   state:0
+not find valid similar frame!
+not find valid similar frame!
+not find valid similar frame!
+ callback cvbrige
+ callback cvbrige
+ callback cvbrige
+ callback cvbrige
+ callback cvbrige
+ callback cvbrige
+ callback cvbrige
+ callback cvbrige
+ callback cvbrige
+ callback cvbrige
+ callback cvbrige
+ callback cvbrige
+ callback cvbrige
+ callback cvbrige
+capture.Enable_ = true 
+dd: 0.1   th: 0.0324488
+ callback cvbrige
+ callback cvbrige enable
+[ INFO] [1510385728.092935695]: Saving images
+[ INFO] [1510385728.092991193]: db info 1
+[ INFO] [1510385728.093314284]: db info 2
+RGB 1176
+depth 1172
+capture.Enable_ = true 
+dd: 0.101549   th: 0.00433585
+extract keypoints cost time: 0.008915
+extract computeDescriptors cost time: 0.008785
+image retrieve done.
+searching for image_query  returns 20 results
+result
+result 0:   frame_id: 318    score: 0.0105451   x:0   y:0   theta:0   state:0
+result 1:   frame_id: 184    score: 0.0102579   x:0   y:0   theta:0   state:0
+result 2:   frame_id: 352    score: 0.0099901   x:0   y:0   theta:0   state:0
+result 3:   frame_id: 82    score: 0.00977907   x:0   y:0   theta:0   state:0
+result 4:   frame_id: 177    score: 0.00966637   x:0   y:0   theta:0   state:0
+result 5:   frame_id: 469    score: 0.00936211   x:0   y:0   theta:0   state:0
+result 6:   frame_id: 182    score: 0.00929538   x:0   y:0   theta:0   state:0
+result 7:   frame_id: 91    score: 0.00918974   x:0   y:0   theta:0   state:0
+result 8:   frame_id: 166    score: 0.0090919   x:0   y:0   theta:0   state:0
+result 9:   frame_id: 408    score: 0.00899394   x:0   y:0   theta:0   state:0
+result 10:   frame_id: 314    score: 0.00856055   x:0   y:0   theta:0   state:0
+result 11:   frame_id: 79    score: 0.00846723   x:0   y:0   theta:0   state:0
+result 12:   frame_id: 95    score: 0.00836999   x:0   y:0   theta:0   state:0
+result 13:   frame_id: 86    score: 0.00834773   x:0   y:0   theta:0   state:0
+result 14:   frame_id: 85    score: 0.00792248   x:0   y:0   theta:0   state:0
+result 15:   frame_id: 180    score: 0.00771737   x:0   y:0   theta:0   state:0
+result 16:   frame_id: 311    score: 0.00764848   x:0   y:0   theta:0   state:0
+result 17:   frame_id: 375    score: 0.00750412   x:0   y:0   theta:0   state:0
+result 18:   frame_id: 471    score: 0.00745729   x:0   y:0   theta:0   state:0
+result 19:   frame_id: 44    score: 0.00733968   x:0   y:0   theta:0   state:0
+not find valid similar frame!
+not find valid similar frame!
+not find valid similar frame!
+capture.Enable_ = true 
+dd: 0.1   th: 0.00448991
+ callback cvbrige
+ callback cvbrige enable
+[ INFO] [1510385729.095934757]: Saving images
+[ INFO] [1510385729.095998368]: db info 1
+[ INFO] [1510385729.096315835]: db info 2
+RGB 1200
+depth 1197
+extract keypoints cost time: 0.007772
+extract computeDescriptors cost time: 0.009179
+image retrieve done.
+searching for image_query  returns 20 results
+result 0   frame_id: 180   score: 0.0196897
+good matches: 161
+match cost time: 0.009579
+pnp inliers: 0
+virtual bool g2o::SparseOptimizer::initializeOptimization(g2o::HyperGraph::VertexSet&, int): Attempt to initialize an empty graph
+virtual int g2o::SparseOptimizer::optimize(int, bool): 0 vertices to optimize, maybe forgot to call initializeOptimization()
+reject because inlier is too small: 0
+Twc
+ 0.187312   0.91312  0.362115  0.539013
+-0.0519328  0.377329 -0.924622   2.11942
+-0.980927  0.154387  0.118099   2.17514
+        0         0         0         1
+
+
+result
+result 0:   frame_id: 180    score: 0.0196897   x:0.539013   y:2.17514   theta:1.7301   state:0
+result 1:   frame_id: 98    score: 0.0133674   x:0   y:0   theta:0   state:0
+result 2:   frame_id: 182    score: 0.0131463   x:0   y:0   theta:0   state:0
+result 3:   frame_id: 56    score: 0.0121595   x:0   y:0   theta:0   state:0
+result 4:   frame_id: 53    score: 0.0115496   x:0   y:0   theta:0   state:0
+result 5:   frame_id: 93    score: 0.0112798   x:0   y:0   theta:0   state:0
+result 6:   frame_id: 79    score: 0.0110812   x:0   y:0   theta:0   state:0
+result 7:   frame_id: 30    score: 0.0105588   x:0   y:0   theta:0   state:0
+result 8:   frame_id: 78    score: 0.0104111   x:0   y:0   theta:0   state:0
+result 9:   frame_id: 54    score: 0.0102997   x:0   y:0   theta:0   state:0
+result 10:   frame_id: 80    score: 0.0101203   x:0   y:0   theta:0   state:0
+result 11:   frame_id: 70    score: 0.0100012   x:0   y:0   theta:0   state:0
+result 12:   frame_id: 270    score: 0.00979979   x:0   y:0   theta:0   state:0
+result 13:   frame_id: 68    score: 0.00968567   x:0   y:0   theta:0   state:0
+result 14:   frame_id: 95    score: 0.00948151   x:0   y:0   theta:0   state:0
+result 15:   frame_id: 396    score: 0.00882465   x:0   y:0   theta:0   state:0
+result 16:   frame_id: 90    score: 0.00864319   x:0   y:0   theta:0   state:0
+result 17:   frame_id: 58    score: 0.00856776   x:0   y:0   theta:0   state:0
+result 18:   frame_id: 81    score: 0.00856159   x:0   y:0   theta:0   state:0
+result 19:   frame_id: 390    score: 0.00839844   x:0   y:0   theta:0   state:0
+not find valid similar frame!
+not find valid similar frame!
+not find valid similar frame!
+capture.Enable_ = true 
+dd: 0.1   th: 0.00447663
+capture.Enable_ = true 
+dd: 0.1   th: 0.0064708
+ callback cvbrige
+ callback cvbrige enable
+[ INFO] [1510385729.941705840]: Saving images
+[ INFO] [1510385729.941761827]: db info 1
+[ INFO] [1510385729.943018659]: db info 2
+RGB 1220
+depth 1212
+extract keypoints cost time: 0.009772
+extract computeDescriptors cost time: 0.008608
+image retrieve done.
+searching for image_query  returns 20 results
+result 0   frame_id: 80   score: 0.0180632
+good matches: 43
+match cost time: 0.002488
+pnp inliers: 0
+virtual bool g2o::SparseOptimizer::initializeOptimization(g2o::HyperGraph::VertexSet&, int): Attempt to initialize an empty graph
+virtual int g2o::SparseOptimizer::optimize(int, bool): 0 vertices to optimize, maybe forgot to call initializeOptimization()
+reject because inlier is too small: 0
+Twc
+ 0.573448 -0.724177  0.383046  -16.4932
+ -0.48773 -0.677455 -0.550612   17.8061
+ 0.658238  0.128924 -0.741689   24.8027
+        0         0         0         1
+
+
+result 1   frame_id: 90   score: 0.0174249
+good matches: 33
+match cost time: 0.005438
+pnp inliers: 21
+reject because motion is too large: 13.1348
+Twc
+  0.999837 0.00692788  0.0166607    6.94628
+-0.0120763    0.94299   0.332603   -7.18866
+-0.0134066   -0.33275    0.94292   -1.90916
+         0          0          0          1
+
+
+result
+result 0:   frame_id: 80    score: 0.0180632   x:-16.4932   y:24.8027   theta:2.74621   state:0
+result 1:   frame_id: 90    score: 0.0174249   x:6.94628   y:-1.90916   theta:0.339644   state:0
+result 2:   frame_id: 265    score: 0.0135825   x:0   y:0   theta:0   state:0
+result 3:   frame_id: 82    score: 0.0125849   x:0   y:0   theta:0   state:0
+result 4:   frame_id: 88    score: 0.0124164   x:0   y:0   theta:0   state:0
+result 5:   frame_id: 56    score: 0.0121738   x:0   y:0   theta:0   state:0
+result 6:   frame_id: 89    score: 0.0120673   x:0   y:0   theta:0   state:0
+result 7:   frame_id: 194    score: 0.0115236   x:0   y:0   theta:0   state:0
+result 8:   frame_id: 91    score: 0.0109161   x:0   y:0   theta:0   state:0
+result 9:   frame_id: 373    score: 0.0105984   x:0   y:0   theta:0   state:0
+result 10:   frame_id: 376    score: 0.0104388   x:0   y:0   theta:0   state:0
+result 11:   frame_id: 86    score: 0.0101279   x:0   y:0   theta:0   state:0
+result 12:   frame_id: 269    score: 0.00989783   x:0   y:0   theta:0   state:0
+result 13:   frame_id: 83    score: 0.00983888   x:0   y:0   theta:0   state:0
+result 14:   frame_id: 85    score: 0.00965278   x:0   y:0   theta:0   state:0
+result 15:   frame_id: 37    score: 0.00950319   x:0   y:0   theta:0   state:0
+result 16:   frame_id: 336    score: 0.00939954   x:0   y:0   theta:0   state:0
+result 17:   frame_id: 262    score: 0.00925008   x:0   y:0   theta:0   state:0
+result 18:   frame_id: 72    score: 0.00922606   x:0   y:0   theta:0   state:0
+result 19:   frame_id: 372    score: 0.00919487   x:0   y:0   theta:0   state:0
+not find valid similar frame!
+not find valid similar frame!
+not find valid similar frame!
+capture.Enable_ = true 
+dd: 0.0924169   th: 0.0872665
+ callback cvbrige
+ callback cvbrige enable
+[ INFO] [1510385731.738759608]: Saving images
+[ INFO] [1510385731.738793916]: db info 1
+[ INFO] [1510385731.739085835]: db info 2
+RGB 1249
+depth 1243
+extract keypoints cost time: 0.008002
+extract computeDescriptors cost time: 0.007876
+image retrieve done.
+searching for image_query  returns 20 results
+result 0   frame_id: 90   score: 0.0244953
+good matches: 13
+match cost time: 0.007043
+pnp inliers: 9
+reject because inlier is too small: 9
+Twc
+-0.772111 -0.625402 -0.112772   5.17703
+-0.635411  0.757004   0.15231   2.11759
+-0.00988591  0.189257 -0.981878   1.57008
+        0         0         0         1
+
+
+result 1   frame_id: 91   score: 0.0195662
+good matches too small: 8
+Twc
+1 0 0 0
+0 1 0 0
+0 0 1 0
+0 0 0 1
+
+
+result 2   frame_id: 94   score: 0.0182191
+Segmentation fault (core dumped)
+
+
+
+
+
+
+
+
+
+
 
 */
 

@@ -50,7 +50,7 @@ class Capturer
 	  bool Enable_;
 	  cv::Mat color_, depth_;
 
-		Capturer(std::string save_dir): saveCount_(0),it(nh),state_(false),Enable_(false),save_dir_(save_dir),			
+		Capturer(std::string save_dir): saveCount_(0),it(nh),state_(false),Enable_(false),save_dir_(save_dir),	
 					rgb_sub( it, "/camera/rgb/image_raw", 1 ),
 					depth_sub( it, "/camera/depth/image_raw", 1 ),
 					sync( MySyncPolicy( 10 ), rgb_sub, depth_sub )
@@ -81,7 +81,7 @@ class Capturer
 			cv_bridge::CvImageConstPtr cv_ptr;
 		  	try
 		  	{
-				cv_ptr = cv_bridge::toCvShare(rgb_image, sensor_msgs::image_encodings::BGR8);
+				cv_ptr = cv_bridge::toCvCopy(rgb_image, sensor_msgs::image_encodings::BGR8);				
 				std::cout << "RGB " << cv_ptr->header.seq << std::endl;
 				saveImage(cv_ptr, "rgb");
 				
@@ -98,7 +98,7 @@ class Capturer
 		  	// Process depth image
 		  	try
 		  	{
-		   		cv_ptr = cv_bridge::toCvShare(depth_image, sensor_msgs::image_encodings::TYPE_16UC1);
+		   		cv_ptr = cv_bridge::toCvCopy(depth_image, sensor_msgs::image_encodings::TYPE_16UC1);
 		   		std::cout << "depth " << cv_ptr->header.seq << std::endl;
 		   		saveImage(cv_ptr, "depth");
 		   		

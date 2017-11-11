@@ -1,3 +1,7 @@
+set(cv_bridge_DIR /usr/local/share/cv_bridge/cmake)
+#set(cv_bridge_DIR /opt/ros/indigo/share/cv_bridge/cmake)
+include_directories( ${cv_bridge_DIR} )
+
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   roscpp
