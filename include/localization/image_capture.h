@@ -50,7 +50,7 @@ class Capturer
 	  bool Enable_;
 	  cv::Mat color_, depth_;
 
-		Capturer(std::string save_dir): saveCount_(0),it(nh),state_(false),Enable_(false),save_dir_(save_dir),	
+		Capturer(std::string save_dir): saveCount_(0),it(nh),state_(false),Enable_(true),save_dir_(save_dir),	
 					rgb_sub( it, "/camera/rgb/image_raw", 1 ),
 					depth_sub( it, "/camera/depth/image_raw", 1 ),
 					sync( MySyncPolicy( 10 ), rgb_sub, depth_sub )

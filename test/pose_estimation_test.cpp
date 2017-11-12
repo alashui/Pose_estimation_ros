@@ -94,7 +94,7 @@ int main(int argc, char** argv)
 	string dir_result_simple_out(capture_save_dir_+"/result_simple.txt");
 	ofstream fout(dir_result_detailed_out); //记录详细输出结果
 	ofstream fout1(dir_result_simple_out); //记录简单输出结果
-	
+	fout1<<"image_index state  x_value y_value theta_value"<<endl;
     while( ros::ok() )
     {
     	ros::spinOnce();               // check for incoming messages
@@ -114,7 +114,7 @@ int main(int argc, char** argv)
 		
 		dd=sqrt(x*x + y*y);
 		//cout <<"dd: "<<dd<<"   th: "<<th<<endl;
-		if (dd >= 0.10 || th >= (float)(5.0/180.0) * Pi)  //运动距离超过0.15m或者角度超过10度
+		if (dd >= 0.10 || th >= (float)(5.0/180.0) * Pi)  //运动距离超过0.1m或者角度超过5度
 		{									   //则可捕获一张图像
 			capture.Enable_ = true;
 			x = 0;
@@ -146,14 +146,18 @@ int main(int argc, char** argv)
 		//    cout<<"searching for image "<<i<<" returns "<< num_result <<" results" <<endl;
 		    cout<<"searching for image_query "<< num_image_captured <<" returns "<< num_result <<" results" <<endl;
 		    fout<<"searching for image_query "<< num_image_captured <<" returns "<< num_result <<" results" <<endl;
-		    fout1<<"result for image_query "<< num_image_captured <<endl;
+		    
+		    
+		    fout1<< num_image_captured << "  ";
 		    pose_estimation.map_->map_points_.clear();
 		    
 		    class PoseResult   //表示相机位姿
 		    {
 		    	public:
-		    		double score, x, y,theta;int frame_id;bool state;
-		    		PoseResult():score(0), x(0), y(0),theta(0),frame_id(0),state(false){}		    			
+		    		double score, x, y,theta;int frame_id,num_inliers;bool state;
+		    		PoseResult():
+		    			score(0), x(0), y(0),theta(0),
+		    			frame_id(0),num_inliers(0),state(false){}		    			
 		    };  
 		    
 		    
@@ -211,7 +215,8 @@ int main(int argc, char** argv)
 				if ( pose_estimation.featureMatching(pose_estimation.curr_, pose_estimation.ref_) ) //匹配成功才做运动估计
 				{
 					pose_estimation.poseEstimationPnP();
-					pose_result.state = pose_estimation.checkEstimatedPose();	//运动估计结果的状态			
+					pose_result.num_inliers =pose_estimation.num_inliers_	;	//RANSAC运动估计的内点数	
+					pose_result.state = pose_estimation.checkEstimatedPose();	//运动估计结果的状态						
 				}
 					
 				pose_estimation.map_->map_points_.clear();	//清除地图点
@@ -236,6 +241,7 @@ int main(int argc, char** argv)
 				cout << "result " << k << ":   " 
 					 << "frame_id: " << pose_result_vec[k].frame_id << "   "
 					 << " score: "  << pose_result_vec[k].score << "   "
+					 << " num_inliers: "  << pose_result_vec[k].num_inliers << "   "
 					 << "x:"<< pose_result_vec[k].x << "   "
 					 << "y:"<< pose_result_vec[k].y << "   "
 					 << "theta:"<<pose_result_vec[k].theta <<"   "
@@ -248,6 +254,7 @@ int main(int argc, char** argv)
 				fout << "result " << k << ":   " 
 					 << "frame_id: " << pose_result_vec[k].frame_id << "   "
 					 << " score: "  << pose_result_vec[k].score << "   "
+					 << " num_inliers: "  << pose_result_vec[k].num_inliers << "   "
 					 << "x:"<< pose_result_vec[k].x << "   "
 					 << "y:"<< pose_result_vec[k].y << "   "
 					 << "theta:"<<pose_result_vec[k].theta <<"   "
@@ -260,41 +267,59 @@ int main(int argc, char** argv)
 			pose.pose.pose.position.x=0;
 			pose.pose.pose.position.y=0;
 			pose.pose.pose.position.z=0;
-			/*pose.pose.covariance=[ 0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
+			pose.pose.covariance={ 0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
 								   0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 
 								   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
 								   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
 								   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
-								   0.0, 0.0, 0.0, 0.0, 0.0, 0.068 ];*/
+								   0.0, 0.0, 0.0, 0.0, 0.0, 0.068 };
 								  
 			pose.pose.pose.orientation.x=0;
 			pose.pose.pose.orientation.y=0;						  
 			pose.pose.pose.orientation.z=0;
 			pose.pose.pose.orientation.w=0;
 			
+			//对求得的结果作加权平均，分数占0.8，内点0.2
 			int num_good_pose(0);
-			double pose_x(0), pose_y(0),pose_theta(0);		
+			double pose_x(0), pose_y(0),pose_theta(0);
+			double pose_score_total(0), pose_inliers_total(0);		
 			for(int k=0; k<num_result; k++)
 			{
 				if(pose_result_vec[k].state)
 				{
 					num_good_pose++;
-					pose_x += pose_result_vec[k].x;
-					pose_y += pose_result_vec[k].y;
-					pose_theta +=pose_result_vec[k].theta;
+					pose_score_total += pose_result_vec[k].score;
+					pose_inliers_total += pose_result_vec[k].num_inliers;
 				}	
-
 			}
+						
 			if(num_good_pose !=0)
 			{
-				pose.pose.pose.position.x= pose_x/num_good_pose;
-				pose.pose.pose.position.y= pose_y/num_good_pose;
+				for(int k=0; k<num_result; k++)
+				{
+					if(pose_result_vec[k].state)
+					{					
+						double pose_weight(0);
+						pose_weight =( (0.8*pose_result_vec[k].score   /pose_score_total)  + 
+								       (0.2*pose_result_vec[k].num_inliers /pose_inliers_total)  );
+						pose_x +=pose_weight * pose_result_vec[k].x; 							  
+						pose_y +=pose_weight * pose_result_vec[k].y;
+						pose_theta +=pose_weight * pose_result_vec[k].theta;
+					}	
+
+				}
+			
+				pose.pose.pose.position.x= pose_x;
+				pose.pose.pose.position.y= pose_y;
 				pose.pose.pose.position.z=0;
 									  
 				pose.pose.pose.orientation.x=0;
 				pose.pose.pose.orientation.y=0;						  
 				pose.pose.pose.orientation.z=sin(0.5*pose_theta/num_good_pose);
 				pose.pose.pose.orientation.w=cos(0.5*pose_theta/num_good_pose);
+				
+				initial_pose_pub.publish(pose);
+				
 				
 				cout<<"good pose :" <<" x:" << pose.pose.pose.position.x 	
 									<<"   y:" << pose.pose.pose.position.y 
@@ -308,11 +333,11 @@ int main(int argc, char** argv)
 									<<endl;	
 				fout << endl << endl <<endl;
 					
-				fout1<<"good pose :" <<" x:" << pose.pose.pose.position.x 	
-									<<"   y:" << pose.pose.pose.position.y 
-									<<"   theta:" << pose.pose.pose.orientation.z
-									<<endl;	
-				fout1 << endl <<endl;									
+				fout1<<"find "<< pose.pose.pose.position.x 	
+							  <<" " << pose.pose.pose.position.y 
+							  <<" " << pose.pose.pose.orientation.z
+							  <<endl;	
+													
 			}
 			else			 
 			{
@@ -323,11 +348,8 @@ int main(int argc, char** argv)
 				fout << "not find valid similar frame!" <<endl;
 				fout << endl <<endl << endl ;
 				
-				fout1 << "not find valid similar frame!" <<endl;
-				fout1 << endl << endl ;				
+				fout1 << "lost" <<endl;				
 			} 
-			
-			initial_pose_pub.publish(pose);
 		
 		}
  	
