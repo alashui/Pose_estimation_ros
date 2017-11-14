@@ -12,7 +12,9 @@ namespace localization
 {
 
 PoseEstimation::PoseEstimation() :
-    state_ ( INITIALIZING ), ref_ ( nullptr ), curr_ ( nullptr ), map_ ( new Map ), num_lost_ ( 0 ), num_inliers_ ( 0 ), matcher_flann_ ( new cv::flann::LshIndexParams ( 5,10,2 ) )
+						state_ ( INITIALIZING ),curr_ ( nullptr ),ref_ ( nullptr ),     								     								 
+						map_ ( new Map ),num_lost_ ( 0 ), num_inliers_ ( 0 ),     								
+						matcher_flann_ ( new cv::flann::LshIndexParams ( 5,10,2 ) )
 {
 
     match_ratio_        = Config::get<float> ( "match_ratio" );

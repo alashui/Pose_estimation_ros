@@ -29,14 +29,21 @@
 #include "localization/image_retrieve.h"
 #include "localization/config.h"
 
-#include<opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>
 #include <math.h>
 
 #include "localization/image_capture.h"
 
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 
-#define Pi 3.1415926 
+class PoseResult   //表示相机位姿
+{
+	public:
+		double score, x, y,theta;int frame_id,num_inliers;bool state;
+		PoseResult():
+			score(0), x(0), y(0),theta(0),
+			frame_id(0),num_inliers(0),state(false){}		    			
+};
 
 int main(int argc, char** argv) 
 {
@@ -46,13 +53,15 @@ int main(int argc, char** argv)
         return 1;
     }
     
-    /***初始化***/
+/***初始化***/
 	cout<<"initializing... "<<endl;
-    localization::Config::setParameterFile ( argv[1] );    
+    localization::Config::setParameterFile ( argv[1] );
+        
     string map_dir = localization::Config::get<string> ( "map_dir" );
     //string image_query_dir = localization::Config::get<string> ( "image_query_dir" );
     string capture_save_dir_ = localization::Config::get<string> ( "capture_save_dir" );
-    
+    string dir_result_detailed_out(capture_save_dir_+"/result_detailed.txt");
+	string dir_result_simple_out(capture_save_dir_+"/result_simple.txt");
     
 	localization::PoseEstimation pose_estimation;    
 	pose_estimation.mapInitialization();		//初始化地图
@@ -65,66 +74,31 @@ int main(int argc, char** argv)
     image_retrieve.setResultNum(num_result);
     
     cout<<"initialization complete. "<<endl;
-
+/*************/
 
 	/*初始化节点,订阅/odom话题中的消息,在话题/initialpose发布位姿估计信息*/
     ros::init( argc, argv, "PoseEstimation" );
-    ros::NodeHandle n;
-    //ros::Subscriber cmd_sub = n.subscribe("/cmd_vel_mux/input/teleop",50,cmd_callback);
-    ros::Subscriber cmd_sub = n.subscribe<nav_msgs::Odometry>("/odom",10,odom_callback);
-    
+    ros::NodeHandle n;    
 	ros::Publisher initial_pose_pub = n.advertise<geometry_msgs::PoseWithCovarianceStamped>("/initialpose", 10);
+	
     ROS_INFO("Capturer started...");
-    Capturer capture(capture_save_dir_);
-
+    localization::Capturer capture(capture_save_dir_);
+	capture.Enable_=true;
+	
 	int num_image_captured=0;      //捕获成功的图像数量（实际计数的是参与查询的的数量）
 
-	float x = 0.0;
-	float y = 0.0;
-	float th = 0.0;
-	
-	float dd =0.0;
-
-	ros::Time current_time, last_time;
-	current_time = ros::Time::now();
-	last_time = ros::Time::now();
 	
 	//ros::Rate loop_rate(10);
-	string dir_result_detailed_out(capture_save_dir_+"/result_detailed.txt");
-	string dir_result_simple_out(capture_save_dir_+"/result_simple.txt");
+
 	ofstream fout(dir_result_detailed_out); //记录详细输出结果
 	ofstream fout1(dir_result_simple_out); //记录简单输出结果
+		
 	fout1<<"image_index state  x_value y_value theta_value"<<endl;
+	
     while( ros::ok() )
     {
     	ros::spinOnce();               // check for incoming messages
-		current_time = ros::Time::now();
-
-		//compute odometry in a typical way given the velocities of the robot
-		float dt = (current_time - last_time).toSec();
-		float delta_x = (vx * cos(th) - vy * sin(th)) * dt;
-		float delta_y = (vx * sin(th) + vy * cos(th)) * dt;
-		float delta_th = vth * dt;
-		
-		last_time = current_time;
-		
-		x +=abs( delta_x);
-		y +=abs( delta_y);
-		th +=abs(delta_th);
-		
-		dd=sqrt(x*x + y*y);
-		//cout <<"dd: "<<dd<<"   th: "<<th<<endl;
-		if (dd >= 0.10 || th >= (float)(5.0/180.0) * Pi)  //运动距离超过0.1m或者角度超过5度
-		{									   //则可捕获一张图像
-			capture.Enable_ = true;
-			x = 0;
-			y = 0;
-			th = 0;
-			dd = 0;
-		}
-		
-		
-		
+					
 		if(capture.state_)		//图像获取成功,计算相机位姿
 		{
 			capture.state_=false;
@@ -137,31 +111,16 @@ int main(int argc, char** argv)
 		    image_retrieve.frame_query_->extractKeyPoints();
 		    image_retrieve.frame_query_->computeDescriptors();
 		    
-		    /*
-			Mat picture(1000,1000,CV_8UC3,Scalar(255,255,255));      	     	
-			Point center = Point(0,0); */
-
-		  	
 		    image_retrieve.retrieve_result();         
-		//    cout<<"searching for image "<<i<<" returns "<< num_result <<" results" <<endl;
+
 		    cout<<"searching for image_query "<< num_image_captured <<" returns "<< num_result <<" results" <<endl;
 		    fout<<"searching for image_query "<< num_image_captured <<" returns "<< num_result <<" results" <<endl;
 		    
 		    
 		    fout1<< num_image_captured << "  ";
 		    pose_estimation.map_->map_points_.clear();
-		    
-		    class PoseResult   //表示相机位姿
-		    {
-		    	public:
-		    		double score, x, y,theta;int frame_id,num_inliers;bool state;
-		    		PoseResult():
-		    			score(0), x(0), y(0),theta(0),
-		    			frame_id(0),num_inliers(0),state(false){}		    			
-		    };  
-		    
-		    
-		    
+
+	    
 		    vector<PoseResult>pose_result_vec;
 		    	
 		    for(int k=0; k<num_result; k++)
@@ -185,7 +144,7 @@ int main(int argc, char** argv)
 					 <<"   score: "  << pose_result.score 
 					 <<endl;
 			   
-				Mat K = ( Mat_<double> ( 3,3 ) << 525.0, 0, 319.5, 0, 525.0, 239.5, 0, 0, 1 );                 
+				//Mat K = ( Mat_<double> ( 3,3 ) << 525.0, 0, 319.5, 0, 525.0, 239.5, 0, 0, 1 );                 
 				                			 				
 				pose_estimation.curr_= image_retrieve.frame_query_;
 				pose_estimation.ref_= pose_estimation.map_->keyframes_[ pose_result.frame_id ];
@@ -223,11 +182,10 @@ int main(int argc, char** argv)
 		
 				Sophus::SE3 Twc = pose_estimation.T_c_w_estimated_.inverse();			
 				cout <<"Twc"<<endl<<Twc.matrix() << endl <<endl <<endl;	
-			
-			
+
+						
 				pose_result.x= Twc.matrix()(0,3);
-				pose_result.y= Twc.matrix()(2,3);
-			
+				pose_result.y= Twc.matrix()(2,3);			
 				pose_result.theta= acos(0.5*((Twc.matrix()(0,0)+Twc.matrix()(1,1)+Twc.matrix()(2,2))-1)) ;
 				pose_result_vec.push_back(pose_result);
 											
@@ -261,24 +219,7 @@ int main(int argc, char** argv)
 					 << "state:"<<pose_result_vec[k].state << endl;
 			}
 			
-			/*根据计算结果发布初始位姿消息*/
-			geometry_msgs::PoseWithCovarianceStamped pose;
-			pose.header.frame_id = "map";
-			pose.pose.pose.position.x=0;
-			pose.pose.pose.position.y=0;
-			pose.pose.pose.position.z=0;
-			pose.pose.covariance={ 0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
-								   0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 
-								   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
-								   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
-								   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
-								   0.0, 0.0, 0.0, 0.0, 0.0, 0.068 };
-								  
-			pose.pose.pose.orientation.x=0;
-			pose.pose.pose.orientation.y=0;						  
-			pose.pose.pose.orientation.z=0;
-			pose.pose.pose.orientation.w=0;
-			
+	
 			//对求得的结果作加权平均，分数占0.8，内点0.2
 			int num_good_pose(0);
 			double pose_x(0), pose_y(0),pose_theta(0);
@@ -308,16 +249,23 @@ int main(int argc, char** argv)
 					}	
 
 				}
-			
+				
+				/*根据计算结果发布初始位姿消息*/
+				geometry_msgs::PoseWithCovarianceStamped pose;
+				pose.header.frame_id = "map";
 				pose.pose.pose.position.x= pose_x;
 				pose.pose.pose.position.y= pose_y;
-				pose.pose.pose.position.z=0;
-									  
-				pose.pose.pose.orientation.x=0;
-				pose.pose.pose.orientation.y=0;						  
-				pose.pose.pose.orientation.z=sin(0.5*pose_theta/num_good_pose);
-				pose.pose.pose.orientation.w=cos(0.5*pose_theta/num_good_pose);
-				
+				pose.pose.pose.position.z= 0;					  
+				pose.pose.pose.orientation.x= 0;
+				pose.pose.pose.orientation.y= 0;						  
+				pose.pose.pose.orientation.z= sin(0.5*pose_theta/num_good_pose);
+				pose.pose.pose.orientation.w= cos(0.5*pose_theta/num_good_pose);
+				pose.pose.covariance={ 0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
+									   0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 
+									   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
+									   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
+									   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
+									   0.0, 0.0, 0.0, 0.0, 0.0, 0.068 };
 				initial_pose_pub.publish(pose);
 				
 				
@@ -357,173 +305,8 @@ int main(int argc, char** argv)
   	}
 	fout.close();
 	fout1.close();
-    return EXIT_SUCCESS;
 }
 
-
-/*
-int main( int argc, char** argv )
-{
-    if ( argc != 2 )
-    {
-        cout<<"usage: parameter_file!"<<endl;
-        return 1;
-    }
-    
-    /***初始化***
-	cout<<"initializing... "<<endl;
-    localization::Config::setParameterFile ( argv[1] );    
-    string map_dir = localization::Config::get<string> ( "map_dir" );
-    string image_query_dir = localization::Config::get<string> ( "image_query_dir" );
-    
-    
-	localization::PoseEstimation pose_estimation;    
-	pose_estimation.mapInitialization();		//初始化地图
-       
-    //localization::ImageRetrieve::Ptr image_retrieve (new localization::ImageRetrieve );
-    localization::ImageRetrieve image_retrieve;
-    image_retrieve.map_ = pose_estimation.map_;  //数据库为地图中的关键帧
-    image_retrieve.databaseInit(); 
-    int num_result=30;
-    image_retrieve.setResultNum(num_result);
-    
-    cout<<"initialization complete. "<<endl;
-    
-    /***根据输入的图像计算当前位姿***           
-    //for ( int i=0; i<1; i++ )
-    //{	 
-
-     //   string color_path = image_query_dir+"/"+to_string(i+1)+".png"; 
-     //   string depth_path = image_query_dir+"/"+to_string(i+1)+".png"; 
-     
-        string color_path = image_query_dir+"/rgb260.png"; 
-        string depth_path = image_query_dir+"/depth260.png";  
-        
-                         
-        image_retrieve.frame_query_->color_ = imread(color_path);
-        image_retrieve.frame_query_->depth_ = imread(depth_path);   
-        image_retrieve.frame_query_->extractKeyPoints();
-        image_retrieve.frame_query_->computeDescriptors();
-        
-        /*
-		Mat picture(1000,1000,CV_8UC3,Scalar(255,255,255));      	     	
-		Point center = Point(0,0); *
-
-      	
-        image_retrieve.retrieve_result();         
-    //    cout<<"searching for image "<<i<<" returns "<< num_result <<" results" <<endl;
-        cout<<"searching for image_query "<<" returns "<< num_result <<" results" <<endl;
-        
-        pose_estimation.map_->map_points_.clear();
-        
-        class PoseResult{public:double score, x, y,theta;int frame_id;bool state;};  //表示相机位姿
-        
-        
-        
-        vector<PoseResult>pose_result_vec;
-        	
-        for(int k=0; k<num_result; k++)
-        {
-        	PoseResult pose_result;
-        	SE3 T_temp;
-        	pose_estimation.T_c_w_estimated_ = T_temp;		//对上一次的结果清零
-        	
-        	pose_result.frame_id = image_retrieve.EntryId_frame_id_[image_retrieve.result_[k].Id];        	
-        	pose_result.score = image_retrieve.result_[k].Score;
-        	
-		    cout <<"result " << k 
-		    	 //<<" entry_id: " << image_retrieve.result_[k].Id 
-		    	 <<"   frame_id: " << pose_result.frame_id
-		    	 <<"   score: "  << pose_result.score 
-		    	 <<endl;
-		   
-		   
-		    Mat K = ( Mat_<double> ( 3,3 ) << 525.0, 0, 319.5, 0, 525.0, 239.5, 0, 0, 1 );                 
-		                    			 				
-			pose_estimation.curr_= image_retrieve.frame_query_;
-			pose_estimation.ref_= pose_estimation.map_->keyframes_[ pose_result.frame_id ];
-			
-
-			//估计当前帧与参考帧的运动,3d点为参考帧上产生的地图点,2d点为当前帧的像素点
-						
-			for ( size_t i=0; i < pose_estimation.ref_->keypoints_.size(); i++ )   //计算参考帧上产生的地图点
-		    {
-		    	
-		        double d = pose_estimation.ref_->findDepth ( pose_estimation.ref_->keypoints_[i] );
-		        if ( d < 0 ) 
-		            continue;
-		        Vector3d p_world = pose_estimation.ref_->camera_->pixel2world (
-		        	Vector2d ( pose_estimation.ref_->keypoints_[i].pt.x, pose_estimation.ref_->keypoints_[i].pt.y ), 
-		        		pose_estimation.ref_->T_c_w_, d   );
-
-		                      
-		        Vector3d n;// = p_world - pose_estimation.ref_->getCamCenter();
-		        n.normalize();
-		        localization::MapPoint::Ptr map_point =localization::MapPoint::createMapPoint(  p_world, n,
-		          				 pose_estimation.ref_->descriptors_.row(i).clone(), pose_estimation.ref_.get()    );
-		        pose_estimation.map_->insertMapPoint( map_point ); 
-		        							//计算这一参考帧产生的地图点,其实跟地图没有关系,只是计算它的三维点
-		    }	
-		    	   		
-			if ( pose_estimation.featureMatching(pose_estimation.curr_, pose_estimation.ref_) ) //匹配成功才做运动估计
-			{
-				pose_estimation.poseEstimationPnP();
-				pose_result.state = pose_estimation.checkEstimatedPose();				
-			}
-					
-			pose_estimation.map_->map_points_.clear();	//清除地图点
-		
-			Sophus::SE3 Twc = pose_estimation.T_c_w_estimated_.inverse();			
-			cout <<"Twc"<<endl<<Twc.matrix() << endl <<endl <<endl;	
-			
-			
-			pose_result.x= Twc.matrix()(0,3);
-			pose_result.y= Twc.matrix()(2,3);
-			
-			pose_result.theta= acos(0.5*((Twc.matrix()(0,0)+Twc.matrix()(1,1)+Twc.matrix()(2,2))-1)) ;
-			pose_result_vec.push_back(pose_result);
-
-
-			/*
-			center.x =500+Twc.matrix()(0,3)*10;
-			center.y =500+Twc.matrix()(2,3)*10;  
-			cout <<"x:"<<center.x <<"  y:"<<center.y<<endl;
-			//半径  
-			int r = 10;  
-			//承载图像  
-			 
-			//参数为：承载的图像、圆心、半径、颜色、粗细、线型  
-			circle(picture,center,r,Scalar(0,0,250));  
-			*
-			
-										
-		}
-		
-		/***输出结果***
-		cout <<"result"<<endl;
-		for(int k=0; k<num_result; k++)
-		{
-			
-			cout << "result " << k << ":   " 
-				 << "frame_id: " << pose_result_vec[k].frame_id << "   "
-				 << " score: "  << pose_result_vec[k].score << "   "
-				 << "x:"<< pose_result_vec[k].x << "   "
-				 << "y:"<< pose_result_vec[k].y << "   "
-				 << "theta:"<<pose_result_vec[k].theta <<"   "
-				 << "state:"<<pose_result_vec[k].state << endl;
-		}
-		
-		
-		
-		
-		/*imshow("pose",picture); 
-		waitKey(0);*																	      
-    //}
-
-
-
-}
-*/
 
 
 /*
