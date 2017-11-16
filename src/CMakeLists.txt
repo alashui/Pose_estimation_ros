@@ -7,12 +7,14 @@ add_library( localization SHARED
     g2o_types.cpp
     image_retrieve.cpp
     pose_estimation.cpp
+    image_capture.cpp
+)
+target_link_libraries( localization
+    ${THIRD_PARTY_LIBS} 
+    ${catkin_LIBRARIES}
     
 )
 
-target_link_libraries( localization
-    ${THIRD_PARTY_LIBS} 
-)
 
 
 #add_executable( vocabulary_training vocabulary_training.cpp )

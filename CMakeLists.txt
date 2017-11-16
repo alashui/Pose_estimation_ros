@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(pose_estimation)
+project(localization_ros)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -7,8 +7,21 @@ project(pose_estimation)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED)
+#find_package(catkin REQUIRED)
+set(cv_bridge_DIR /usr/local/share/cv_bridge/cmake)
+#set(cv_bridge_DIR /opt/ros/indigo/share/cv_bridge/cmake)
+include_directories( ${cv_bridge_DIR} )
 
+find_package(catkin REQUIRED COMPONENTS
+  geometry_msgs
+  roscpp
+  rospy
+  sensor_msgs
+  std_msgs
+  cv_bridge
+  message_filters
+  image_transport
+)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -99,6 +112,7 @@ find_package(catkin REQUIRED)
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
+	CATKIN_DEPENDS geometry_msgs roscpp rospy sensor_msgs std_msgs cv_bridge message_filters image_transport
 #  INCLUDE_DIRS include
 #  LIBRARIES pose_estimation
 #  CATKIN_DEPENDS other_catkin_pkg
@@ -226,7 +240,9 @@ include_directories( ${DBoW3_INCLUDE_DIRS} )
 
 
 
-set( THIRD_PARTY_LIBS 
+
+
+set( THIRD_PARTY_LIBS 	
     ${OpenCV_LIBS}
     ${Sophus_LIBRARIES}
     ${CSPARSE_LIBRARY}

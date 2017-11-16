@@ -32,7 +32,27 @@ PoseEstimation::~PoseEstimation(){}
 bool PoseEstimation::featureMatching( const Frame::Ptr frame_curr,
 									  const Frame::Ptr frame_ref   )
 {
-    boost::timer timer;   
+    boost::timer timer;
+    map_->map_points_.clear();	//清除地图点            
+	for ( size_t i=0; i < frame_ref->keypoints_.size(); i++ )   //计算参考帧上产生的地图点
+	{
+		
+	    double d = frame_ref->findDepth ( frame_ref->keypoints_[i] );
+	    if ( d < 0 ) 
+	        continue;
+	    Vector3d p_world = frame_ref->camera_->pixel2world (
+	    	Vector2d ( frame_ref->keypoints_[i].pt.x, frame_ref->keypoints_[i].pt.y ), 
+	    		frame_ref->T_c_w_, d   );
+
+	                  
+	    Vector3d n;// = p_world - pose_estimation.ref_->getCamCenter();
+	    n.normalize();
+	    MapPoint::Ptr map_point =localization::MapPoint::createMapPoint(  p_world, n,
+	      				 frame_ref->descriptors_.row(i).clone(), frame_ref.get()    );
+	    map_->insertMapPoint( map_point ); 
+	    							//计算这一参考帧产生的地图点,其实跟地图没有关系,只是计算它的三维点
+	}	    
+
     vector<cv::DMatch> matches;
               
     // select the candidates in map 
@@ -50,7 +70,8 @@ bool PoseEstimation::featureMatching( const Frame::Ptr frame_curr,
             candidate.push_back( p );   
             desp_map.push_back( p->descriptor_ );
         }
-    }          
+    }
+                   
     matcher_flann_.match ( desp_map, frame_curr->descriptors_, matches );      
 	if ( matches.size() < 10)     
 	{	

@@ -12,6 +12,7 @@
 #include <sensor_msgs/Image.h>
 #include <geometry_msgs/Twist.h>
 #include <nav_msgs/Odometry.h>
+#include <cmath>
 
 namespace localization 
 {
@@ -28,7 +29,7 @@ class Capturer
 	  float odom_vx, odom_vy, odom_vth;
 	  float x, y , th, dd;
 	  ros::Time last_time;
-
+	  
 	  image_transport::ImageTransport it;
 	  typedef image_transport::SubscriberFilter ImageSubscriber;
 	  ImageSubscriber rgb_sub;
@@ -40,6 +41,7 @@ class Capturer
 	  
 	public:
 	  std::string save_dir_;
+	  
 	  int saveCount_;
 	  bool state_;   //是否采集到图像
 	  bool Enable_;	 //是否要采集

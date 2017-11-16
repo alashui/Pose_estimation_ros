@@ -105,7 +105,7 @@ int main(int argc, char** argv)
 			
 			num_image_captured++;
 			
-			/***根据输入的图像计算当前位姿***/           		 		                     
+		/***对捕获到的图像检索相似帧***/           		 		                     
 		    image_retrieve.frame_query_->color_ = capture.color_;
 		    image_retrieve.frame_query_->depth_ = capture.depth_;   
 		    image_retrieve.frame_query_->extractKeyPoints();
@@ -115,12 +115,11 @@ int main(int argc, char** argv)
 
 		    cout<<"searching for image_query "<< num_image_captured <<" returns "<< num_result <<" results" <<endl;
 		    fout<<"searching for image_query "<< num_image_captured <<" returns "<< num_result <<" results" <<endl;
-		    
-		    
+		/***************************/    
+		 
+		/***对得到的所有相似帧，分别估计当前相机位姿***/    
 		    fout1<< num_image_captured << "  ";
-		    pose_estimation.map_->map_points_.clear();
 
-	    
 		    vector<PoseResult>pose_result_vec;
 		    	
 		    for(int k=0; k<num_result; k++)
@@ -147,42 +146,16 @@ int main(int argc, char** argv)
 				//Mat K = ( Mat_<double> ( 3,3 ) << 525.0, 0, 319.5, 0, 525.0, 239.5, 0, 0, 1 );                 
 				                			 				
 				pose_estimation.curr_= image_retrieve.frame_query_;
-				pose_estimation.ref_= pose_estimation.map_->keyframes_[ pose_result.frame_id ];
-			
-
-				//估计当前帧与参考帧的运动,3d点为参考帧上产生的地图点,2d点为当前帧的像素点
-						
-				for ( size_t i=0; i < pose_estimation.ref_->keypoints_.size(); i++ )   //计算参考帧上产生的地图点
-				{
-					
-				    double d = pose_estimation.ref_->findDepth ( pose_estimation.ref_->keypoints_[i] );
-				    if ( d < 0 ) 
-				        continue;
-				    Vector3d p_world = pose_estimation.ref_->camera_->pixel2world (
-				    	Vector2d ( pose_estimation.ref_->keypoints_[i].pt.x, pose_estimation.ref_->keypoints_[i].pt.y ), 
-				    		pose_estimation.ref_->T_c_w_, d   );
-
-				                  
-				    Vector3d n;// = p_world - pose_estimation.ref_->getCamCenter();
-				    n.normalize();
-				    localization::MapPoint::Ptr map_point =localization::MapPoint::createMapPoint(  p_world, n,
-				      				 pose_estimation.ref_->descriptors_.row(i).clone(), pose_estimation.ref_.get()    );
-				    pose_estimation.map_->insertMapPoint( map_point ); 
-				    							//计算这一参考帧产生的地图点,其实跟地图没有关系,只是计算它的三维点
-				}	
-					   		
+				pose_estimation.ref_= pose_estimation.map_->keyframes_[ pose_result.frame_id ];	   		
 				if ( pose_estimation.featureMatching(pose_estimation.curr_, pose_estimation.ref_) ) //匹配成功才做运动估计
 				{
 					pose_estimation.poseEstimationPnP();
 					pose_result.num_inliers =pose_estimation.num_inliers_	;	//RANSAC运动估计的内点数	
 					pose_result.state = pose_estimation.checkEstimatedPose();	//运动估计结果的状态						
 				}
-					
-				pose_estimation.map_->map_points_.clear();	//清除地图点
-		
+							
 				Sophus::SE3 Twc = pose_estimation.T_c_w_estimated_.inverse();			
 				cout <<"Twc"<<endl<<Twc.matrix() << endl <<endl <<endl;	
-
 						
 				pose_result.x= Twc.matrix()(0,3);
 				pose_result.y= Twc.matrix()(2,3);			
@@ -190,21 +163,13 @@ int main(int argc, char** argv)
 				pose_result_vec.push_back(pose_result);
 											
 			}
-		
-			/***输出结果***/
+		/***********************************/
+			
+			
+		/***记录所有结果到文件***/
 			cout <<"result"<<endl;
 			for(int k=0; k<num_result; k++)
 			{
-				/*
-				cout << "result " << k << ":   " 
-					 << "frame_id: " << pose_result_vec[k].frame_id << "   "
-					 << " score: "  << pose_result_vec[k].score << "   "
-					 << " num_inliers: "  << pose_result_vec[k].num_inliers << "   "
-					 << "x:"<< pose_result_vec[k].x << "   "
-					 << "y:"<< pose_result_vec[k].y << "   "
-					 << "theta:"<<pose_result_vec[k].theta <<"   "
-					 << "state:"<<pose_result_vec[k].state << endl;					 
-				*/
  			    if(pose_result_vec[k].score<0.0150) //得分太低的没有计算运动，结果都是0，不保存
 		    	{
 		    		continue;
@@ -218,7 +183,7 @@ int main(int argc, char** argv)
 					 << "theta:"<<pose_result_vec[k].theta <<"   "
 					 << "state:"<<pose_result_vec[k].state << endl;
 			}
-			
+		/**********************/	
 	
 			//对求得的结果作加权平均，分数占0.8，内点0.2
 			int num_good_pose(0);
@@ -269,21 +234,21 @@ int main(int argc, char** argv)
 				initial_pose_pub.publish(pose);
 				
 				
-				cout<<"good pose :" <<" x:" << pose.pose.pose.position.x 	
-									<<"   y:" << pose.pose.pose.position.y 
-									<<"   theta:" << pose.pose.pose.orientation.z
+				cout<<"good pose :" <<" x:" << pose_x 	
+									<<"   y:" << pose_y 
+									<<"   theta:" << pose_theta
 									<<endl;
 									
 										
-				fout<<"good pose :" <<" x:" << pose.pose.pose.position.x 	
-									<<"   y:" << pose.pose.pose.position.y 
-									<<"   theta:" << pose.pose.pose.orientation.z
+				fout<<"good pose :" <<" x:" << pose_x 	
+									<<"   y:" << pose_y 
+									<<"   theta:" << pose_theta
 									<<endl;	
 				fout << endl << endl <<endl;
 					
-				fout1<<"find "<< pose.pose.pose.position.x 	
-							  <<" " << pose.pose.pose.position.y 
-							  <<" " << pose.pose.pose.orientation.z
+				fout1<<"find "<< pose_x 	
+							  <<" " << pose_y 
+							  <<" " << pose_theta
 							  <<endl;	
 													
 			}

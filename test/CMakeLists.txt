@@ -1,20 +1,3 @@
-set(cv_bridge_DIR /usr/local/share/cv_bridge/cmake)
-#set(cv_bridge_DIR /opt/ros/indigo/share/cv_bridge/cmake)
-include_directories( ${cv_bridge_DIR} )
-
-find_package(catkin REQUIRED COMPONENTS
-  geometry_msgs
-  roscpp
-  rospy
-  sensor_msgs
-  std_msgs
-  cv_bridge
-  message_filters
-  image_transport
-)
-
-
-
 add_executable( pose_txt_generate pose_txt_generate.cpp )
 target_link_libraries( pose_txt_generate localization ${DBoW3_LIBS} )
 
@@ -24,8 +7,8 @@ target_link_libraries( image_retrieve_test localization ${OpenCV_LIBS} ${DBoW3_L
 add_executable( map_generate_test map_generate_test.cpp )
 target_link_libraries( map_generate_test localization  ${DBoW3_LIBS})
 
-add_executable( pose_estimation_test pose_estimation_test.cpp )
-target_link_libraries( pose_estimation_test localization  ${DBoW3_LIBS} ${catkin_LIBRARIES})
+add_executable( localization_test localization_test.cpp )
+target_link_libraries( localization_test localization  ${DBoW3_LIBS} ${catkin_LIBRARIES})
 
 
 
