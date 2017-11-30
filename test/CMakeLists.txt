@@ -14,3 +14,17 @@ target_link_libraries( localization_test localization  ${DBoW3_LIBS} ${catkin_LI
 
 
 
+
+find_package(PCL REQUIRED)
+
+## Add include directories
+include_directories(include
+	  ${PCL_INCLUDE_DIRS}
+)
+
+## Add link directories
+link_directories(
+  ${PCL_LIBRARY_DIRS}
+)
+add_executable( obstacle_detector obstacle_detector.cpp )
+target_link_libraries( obstacle_detector ${PCL_LIBRARIES} ${catkin_LIBRARIES})
