@@ -61,8 +61,13 @@ void Capturer::callback(const ImageConstPtr& rgb_image, const ImageConstPtr& dep
 	if(Enable_)
 	{
 		if(saveCount_ == 0)
+		{
 		    saveCount_ ++;
-	
+		    processImage(rgb_image, depth_image);
+		    state_ = true;
+		}
+		
+		
 		if( captrue_check() )
 		{
 		    processImage(rgb_image, depth_image);

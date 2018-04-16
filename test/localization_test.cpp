@@ -36,6 +36,8 @@
 
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 
+#include "std_msgs/String.h"
+
 class PoseResult   //表示相机位姿
 {
 	public:
@@ -80,6 +82,8 @@ int main(int argc, char** argv)
     ros::init( argc, argv, "PoseEstimation" );
     ros::NodeHandle n;    
 	ros::Publisher initial_pose_pub = n.advertise<geometry_msgs::PoseWithCovarianceStamped>("/initialpose", 10);
+	ros::Publisher resultState_pub = n.advertise<std_msgs::String>("/localization_state",10);
+	
 	
     ROS_INFO("Capturer started...");
     localization::Capturer capture(capture_save_dir_);
@@ -232,7 +236,12 @@ int main(int argc, char** argv)
 									   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
 									   0.0, 0.0, 0.0, 0.0, 0.0, 0.068 };
 				initial_pose_pub.publish(pose);
-				
+				std_msgs::String state_temp;
+				std::stringstream ss;
+				ss << "FIND " << endl;
+				state_temp.data = ss.str();
+				resultState_pub.publish(state_temp);
+				ros::spinOnce();
 				
 				cout<<"good pose :" <<" x:" << pose_x 	
 									<<"   y:" << pose_y 
@@ -254,6 +263,13 @@ int main(int argc, char** argv)
 			}
 			else			 
 			{
+				std_msgs::String state_temp;
+				std::stringstream ss;
+				ss << "LOST " << endl;
+				state_temp.data = ss.str();
+				resultState_pub.publish(state_temp);
+				ros::spinOnce();
+				
 				cout << "not find valid similar frame!" <<endl;
 				cout << endl <<endl;	
 				

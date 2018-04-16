@@ -1,7 +1,55 @@
-#include "localization/motion_controller.h"
+#include "ros/ros.h"
+#include "pcl_ros/point_cloud.h"
+#include "pcl/point_types.h"
+#include <pcl/io/pcd_io.h>
+#include <pcl/common/io.h>
+#include <pcl/common/common_headers.h>
+#include "pcl/filters/passthrough.h"
+#include "pcl/filters/voxel_grid.h"
+#include "pcl/filters/radius_outlier_removal.h"
+#include <pcl/ModelCoefficients.h>
+#include <pcl/sample_consensus/method_types.h>   
+#include <pcl/sample_consensus/model_types.h>   
+#include <pcl/segmentation/sac_segmentation.h>   
+#include <pcl/visualization/pcl_visualizer.h>
 
-namespace localization
+#include "geometry_msgs/Twist.h"
+#include "std_msgs/String.h"
+
+enum DriveAction 
 {
+	FORWARD,LEFT,RIGHT,ROTATE
+};
+
+enum LocateState 
+{
+	UNKNOW,FIND,LOST
+};
+
+class Motion_controller
+{
+	private:
+		ros::NodeHandle node;
+		ros::Publisher velocity_pub;	 
+		
+		pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_receieved_;
+		bool is_received; 
+		
+		DriveAction direction;
+		DriveAction currentMOTION;
+		ros::Time last_time;
+		ros::Time rotate_time;
+		double angular_rotated;
+		
+		LocateState  localization_state;
+		  	    
+	public:
+	    Motion_controller(ros::NodeHandle& nodehandle);
+	    void pointCloud_callback(const sensor_msgs::PointCloud2& input);
+	    void state_callback(const std_msgs::String::ConstPtr& msg);
+	    void drive(const ros::TimerEvent& time);
+	  	bool planeExtract(pcl::PointCloud<pcl::PointXYZ>::Ptr);
+};
 
 Motion_controller::Motion_controller(ros::NodeHandle& nodehandle):
 	node(nodehandle),
@@ -10,18 +58,37 @@ Motion_controller::Motion_controller(ros::NodeHandle& nodehandle):
 	cloud_receieved_(new pcl::PointCloud<pcl::PointXYZ>),
 	is_received(false),
 	direction(FORWARD),
-	currentMOTION(FORWARD)
+	currentMOTION(FORWARD),
+	localization_state(UNKNOW)
 		
 {
 	last_time = ros::Time::now();
-	ros::MultiThreadedSpinner threads(2);
-	pointcloud_sub=nh.subscribe<sensor_msgs::PointCloud2>("/camera/depth_registered/points", 1, 
-														&Motion_controller::pcloud_callback,this);
-	ros::Timer drive=node.createTimer(ros::Duration(0.1), &ObstacleAvoidance::drive, this);
+	ros::MultiThreadedSpinner threads(3);
+	ros::Subscriber pointcloud_sub=node.subscribe("/camera/depth_registered/points", 1, 
+									&Motion_controller::pointCloud_callback,this);
+	ros::Subscriber localizationState_sub=node.subscribe("localization_state", 1, 
+									&Motion_controller::state_callback,this);							
+	ros::Timer drive=node.createTimer(ros::Duration(0.1), &Motion_controller::drive, this);
 	threads.spin(); //blocks until the node is interrupted
 }
 
-void Motion_controller::pcloud_callback(const sensor_msgs::PointCloud2& input)    
+void Motion_controller::state_callback(const std_msgs::String::ConstPtr& msg)
+{
+	std::cout << "state_callback:" << std::endl;
+	std_msgs::String state_temp;
+	std::stringstream ss;
+	ss << "FIND " << endl;
+	state_temp.data = ss.str();
+	if(msg->data == state_temp.data)
+	{
+		localization_state=FIND;
+	}
+	else
+	{
+		localization_state=LOST;
+	}
+}
+void Motion_controller::pointCloud_callback(const sensor_msgs::PointCloud2& input)    
 {    
 	pcl::fromROSMsg(input, *cloud_receieved_); 		
 	is_received = true;
@@ -33,21 +100,82 @@ void Motion_controller::pcloud_callback(const sensor_msgs::PointCloud2& input)
 }
 
 void Motion_controller::drive(const ros::TimerEvent& time)
-{      
-	if(is_received)
-	{	
+{   
+	if(localization_state==UNKNOW)	//等待第一帧图像判断完
+		return;
+	
+	if(localization_state==FIND)	//第一帧图像已经找到则完成初步定位
+	{
+		return;
+	}
+	
+ 
+	double DRIVE_LINEARSPEED, DRIVE_ANGULARSPEED;
+	bool DRIVE_MOVE, SHOW_VERBOSE;
+			
+	node.getParamCached("drive_linearspeed", DRIVE_LINEARSPEED);
+	node.getParamCached("drive_angularspeed", DRIVE_ANGULARSPEED);
+	node.getParamCached("drive_move", DRIVE_MOVE);
+	node.getParamCached("show_verbose", SHOW_VERBOSE);	
+	
+	if(currentMOTION==ROTATE)		//原地旋转模式，直到旋转过360度
+	{
+		ros::Time rotate_time_now = ros::Time::now();
+		float dt = (rotate_time_now - rotate_time).toSec();	
+		angular_rotated += DRIVE_ANGULARSPEED * dt;
+		
+		if(angular_rotated >3.15)
+		{
+			direction=FORWARD;
+			
+		}
+		else
+		{
+			direction=ROTATE;
+		}
+		DriveAction newMotion;
+		geometry_msgs::Twist decision;
+
+		//decide what to do, given the advice we've received
+		newMotion=direction;
+
+		//make our move
+		switch(newMotion)
+		{
+			case LEFT:
+				if(SHOW_VERBOSE) ROS_INFO("PILOT :: Turning %5s", "LEFT");
+				decision.angular.z=DRIVE_ANGULARSPEED;
+				break;
+			case RIGHT:
+				if(SHOW_VERBOSE) ROS_INFO("PILOT :: Turning %5s", "RIGHT");
+				decision.angular.z=-DRIVE_ANGULARSPEED;
+				break;
+			case ROTATE:
+				if(SHOW_VERBOSE) ROS_INFO("PILOT :: Turning %5s", "ROTATE");
+				decision.angular.z=DRIVE_ANGULARSPEED;
+				break;
+			default:
+				decision.linear.x=DRIVE_LINEARSPEED;
+		}
+		if(DRIVE_MOVE) velocity_pub.publish(decision);
+		//tell the obstacle detectors what we've done
+		currentMOTION=newMotion;
+		
+		ros::Time rotate_time = ros::Time::now();
+	}  
+	else if(is_received)
+	{	 //接受到点云数据，下采样，剔除地面，切割，
+		//利用剩余点的数量判断有无障碍物，以及障碍物位置
+		//如果障碍物太近，则左（右）转避开，太远则继续前进，else （障碍物距离合适）则提取平面
+		//如果提取到大的平面则视为墙面，进入原地旋转模式，else 左（右）转避开障碍物
 		ros::Time last_time_p = ros::Time::now();
 		is_received = false;
 			
 		double CROP_XRADIUS, CROP_YMIN, CROP_YMAX, CROP_ZMIN, CROP_ZMAX;
 		double GROUND_CLOSEY, GROUND_CLOSEZ, GROUND_FARY, GROUND_FARZ;
 		double GROUND_TOLERANCEFINE, GROUND_TOLERANCEROUGH,SIZE_DOWNSAMPLING;
-		double DISTANCE_MIN,DINTANCE_MAX;
+		double DISTANCE_MIN,DISTANCE_MAX;
 		int NUM_SAMPLES;
-
-	
-		double DRIVE_LINEARSPEED, DRIVE_ANGULARSPEED;
-		bool DRIVE_MOVE, SHOW_VERBOSE;		
 
 		node.getParamCached("size_downsampling", SIZE_DOWNSAMPLING);
 		
@@ -67,12 +195,7 @@ void Motion_controller::drive(const ros::TimerEvent& time)
 		node.getParamCached("ground_farz", GROUND_FARZ);
 		
 		node.getParamCached("ground_tolerancefine", GROUND_TOLERANCEFINE);
-	
-		node.getParamCached("drive_linearspeed", DRIVE_LINEARSPEED);
-		node.getParamCached("drive_angularspeed", DRIVE_ANGULARSPEED);
-		node.getParamCached("drive_move", DRIVE_MOVE);
-		node.getParamCached("show_verbose", SHOW_VERBOSE);	
-		
+			
 		node.getParamCached("distance_min",DISTANCE_MIN);
 		node.getParamCached("distance_max",DISTANCE_MAX);
 		
@@ -140,7 +263,8 @@ void Motion_controller::drive(const ros::TimerEvent& time)
 
 		//cloud_front_pub.publish(*cloud_front);		
 		//cloud_obstacle_pub.publish(*cloud_front);
-	
+		
+		/*
 		if(currentMOTION!=FORWARD) 
 			heightRangeFrontSamples.clear(); //use straight snapshots while turning
 		heightRangeFrontSamples.push_front(cloud_front->size());
@@ -152,9 +276,11 @@ void Motion_controller::drive(const ros::TimerEvent& time)
 							location!=heightRangeFrontSamples.end(); location++  )
 			averageObstacles+=*location;
 		averageObstacles/=heightRangeFrontSamples.size();
-
+		*/
+		
 		//let's DRIVE!
-		if(averageObstacles>0) //something is in our way!
+		//if(averageObstacles>0) //something is in our way!
+		if( cloud_front->size() > 0)
 		{
 			float centroidX=0;
 			float centroidZ=0;
@@ -175,9 +301,9 @@ void Motion_controller::drive(const ros::TimerEvent& time)
 			if(centroidZ < DISTANCE_MIN) //too close to the obstacle
 			{
 				if(centroidX<0) //obstacle(s)' centroid is off to left
-					directionsPrimary=RIGHT;
+					direction=RIGHT;
 				else //centroidX>=0
-					directionsPrimary=LEFT;
+					direction=LEFT;
 			}
 			else if (centroidZ > DISTANCE_MAX) //too far from the obstacle
 			{
@@ -185,14 +311,14 @@ void Motion_controller::drive(const ros::TimerEvent& time)
 			}
 			else	//within the appropriate range
 			{
-				if( computeRotationAngle(cloud_downsampled) );
+				if( planeExtract(cloud_downsampled) ) //如果提取到大的平面则视为墙面，进入原地旋转模式
 					direction=ROTATE;
 				else
 				{
 					if(centroidX<0) //obstacle(s)' centroid is off to left
-					    directionsPrimary=RIGHT;
+					    direction=RIGHT;
 					else //centroidX>=0
-					    directionsPrimary=LEFT;
+					    direction=LEFT;
 				}
 			}
 			
@@ -234,10 +360,15 @@ void Motion_controller::drive(const ros::TimerEvent& time)
 				if(SHOW_VERBOSE) ROS_INFO("PILOT :: Turning %5s", "RIGHT");
 				decision.angular.z=-DRIVE_ANGULARSPEED;
 				break;
+			case ROTATE:
+				if(SHOW_VERBOSE) ROS_INFO("PILOT :: Turning %5s", "ROTATE");
+				decision.angular.z=DRIVE_ANGULARSPEED;
+				rotate_time = ros::Time::now();
+				break;
 			default:
 				decision.linear.x=DRIVE_LINEARSPEED;
 		}
-		if(DRIVE_MOVE) velocity.publish(decision);
+		if(DRIVE_MOVE) velocity_pub.publish(decision);
 		//tell the obstacle detectors what we've done
 		currentMOTION=newMotion;
 		
@@ -249,7 +380,7 @@ void Motion_controller::drive(const ros::TimerEvent& time)
                  
 } 
    
-bool Motion_controller::computeRotationAngle(pcl::PointCloud<pcl::PointXYZ>::Ptr point_cloud_ptr)
+bool Motion_controller::planeExtract(pcl::PointCloud<pcl::PointXYZ>::Ptr point_cloud_ptr)
 {
 	//pcl::PointCloud<pcl::PointXYZ>::Ptr cloudout(new pcl::PointCloud<pcl::PointXYZ>);
 	double plane_model_a,plane_model_b,plane_model_c,plane_model_d;
@@ -280,12 +411,10 @@ bool Motion_controller::computeRotationAngle(pcl::PointCloud<pcl::PointXYZ>::Ptr
 			  << "  yb=" << coefficients->values[1]
 			  << "  zc=" << coefficients->values[2]
 			  << "  d =" << coefficients->values[3] << endl;
-	std::cout <<"totoal number:"<< cloudout->points.size()<< endl;
+	//std::cout <<"totoal number:"<< cloudout->points.size()<< endl;
 }
 
-}
 
-/*
 int main(int argc, char** argv)
 {
 	ros::init(argc, argv, "obstacle_detector"); //string here is the node name
@@ -319,10 +448,10 @@ int main(int argc, char** argv)
 	node.setParam("drive_move", false);
 	node.setParam("show_verbose", true);
 
-	node.setParam("distance_min",DISTANCE_MIN);
-	node.setParam("distance_max",DISTANCE_MAX);
+	node.setParam("distance_min",1.5);
+	node.setParam("distance_max",2.5);
 	
-	ObstacleAvoidance workhorse(node); //block to do obstacle avoidance
+	Motion_controller explorer(node); //block to do obstacle avoidance
 
 
 	//clean up parameters, plus a Vim macro to generate them from "default parameter values"
@@ -352,7 +481,7 @@ int main(int argc, char** argv)
 	node.deleteParam("drive_move");
 	node.deleteParam("show_verbose");
 	
-	node.deleteParam("distance_min",DISTANCE_MIN);
-	node.deleteParam("distance_max",DISTANCE_MAX);
+	node.deleteParam("distance_min");
+	node.deleteParam("distance_max");
 }
-*/
+

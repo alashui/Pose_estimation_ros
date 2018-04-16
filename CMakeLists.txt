@@ -82,7 +82,6 @@ find_package(catkin REQUIRED COMPONENTS
 #   DEPENDENCIES
 #   std_msgs  # Or other packages containing msgs
 # )
-
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
 ################################################
@@ -113,7 +112,16 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-	CATKIN_DEPENDS geometry_msgs roscpp rospy sensor_msgs std_msgs cv_bridge message_filters image_transport
+	CATKIN_DEPENDS 
+	message_runtime 
+	geometry_msgs 
+	roscpp 
+	rospy 
+	sensor_msgs 
+	std_msgs 
+	cv_bridge 
+	message_filters 
+	image_transport
 #  INCLUDE_DIRS include
 #  LIBRARIES pose_estimation
 #  CATKIN_DEPENDS other_catkin_pkg

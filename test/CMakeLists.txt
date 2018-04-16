@@ -28,3 +28,7 @@ link_directories(
 )
 add_executable( obstacle_detector obstacle_detector.cpp )
 target_link_libraries( obstacle_detector ${PCL_LIBRARIES} ${catkin_LIBRARIES})
+
+add_executable( motion_controller_test motion_controller_test.cpp )
+target_link_libraries( motion_controller_test ${PCL_LIBRARIES} ${catkin_LIBRARIES})
+
