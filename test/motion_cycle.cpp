@@ -22,7 +22,7 @@ int main(int argc, char** argv)
   double rate = 20;
   int count = 0;//Loop through the two legs of the trip
   ros::init(argc, argv, "motion_cycle");
-  std::string topic = "/cmd_vel";
+  std::string topic = "/mobile_base/commands/velocity";
   ros::NodeHandle node;
   cmdVelPub = node.advertise<geometry_msgs::Twist>(topic, 1);
 
