@@ -10,7 +10,8 @@ target_link_libraries( map_generate_test localization  ${DBoW3_LIBS})
 add_executable( localization_test localization_test.cpp )
 target_link_libraries( localization_test localization  ${DBoW3_LIBS} ${catkin_LIBRARIES})
 
-
+add_executable(motion_cycle motion_cycle.cpp)
+target_link_libraries(motion_cycle ${catkin_LIBRARIES})
 
 
 
