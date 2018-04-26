@@ -1,0 +1,13 @@
+#goal definition
+float32 rotate_radius
+float32 rotate_angle
+float32 foward_dist
+---
+#result definition
+float32[] ranges
+float32[] angles
+---
+#feedback
+string state_motion
+float32 range
+float32 angle

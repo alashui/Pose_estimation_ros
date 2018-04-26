@@ -22,6 +22,7 @@ find_package(catkin REQUIRED COMPONENTS
   message_filters
   image_transport
   pcl_ros
+  actionlib_msgs
 )
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -71,17 +72,15 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate actions in the 'action' folder
-# add_action_files(
-#   FILES
-#   Action1.action
-#   Action2.action
-# )
+add_action_files(
+  DIRECTORY action
+  FILES hi_motion.action
+)
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+  DEPENDENCIES actionlib_msgs std_msgs  # Or other packages containing msgs
+)
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
 ################################################
@@ -122,6 +121,8 @@ catkin_package(
 	cv_bridge 
 	message_filters 
 	image_transport
+	
+	actionlib_msgs
 #  INCLUDE_DIRS include
 #  LIBRARIES pose_estimation
 #  CATKIN_DEPENDS other_catkin_pkg

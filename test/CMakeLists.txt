@@ -33,3 +33,18 @@ target_link_libraries( obstacle_detector ${PCL_LIBRARIES} ${catkin_LIBRARIES})
 add_executable( motion_controller_test motion_controller_test.cpp )
 target_link_libraries( motion_controller_test ${PCL_LIBRARIES} ${catkin_LIBRARIES})
 
+
+find_package(Boost REQUIRED COMPONENTS system)
+include_directories(include ${catkin_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
+
+add_executable(motionServer motionServer.cpp)
+target_link_libraries(motionServer ${catkin_LIBRARIES} )
+add_dependencies(motionServer ${localization_ros_EXPORTED_TARGETS})
+
+add_executable(motionClient_test motionClient_test.cpp)
+target_link_libraries(motionClient_test ${catkin_LIBRARIES} )
+add_dependencies(motionClient_test ${localization_ros_EXPORTED_TARGETS})
+
+
+
+
