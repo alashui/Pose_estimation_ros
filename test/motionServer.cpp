@@ -119,7 +119,8 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 			speed.angular.z -= 0.01;
 			speed.linear.x = goal->rotate_radius*speed.angular.z;
 		}
-		ROS_INFO("rotation...!");    
+		ROS_INFO("rotation...!"); 
+		listener.lookupTransform(odom_frame, base_frame, ros::Time(0), transform);   
 		double last_angle = fabs(tf::getYaw(transform.getRotation()));//Track the last angle measured   
 		double turn_angle = 0;//Track how far we have turned
 		while( (fabs(turn_angle + angular_tolerance_) < goal->rotate_angle) && (ros::ok()) )
@@ -173,7 +174,7 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 		ros::Duration(1).sleep(); // sleep for  a second	
 	}
 
-    ROS_INFO("move ended!");
+    
 
 /*
 	ros::Rate r(1);
@@ -198,7 +199,7 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 
 	if(as_.isActive())
 		as_.setSucceeded(result_);
-
+	ROS_INFO("move ended!");
 }
 
 void hi_motionActServ::preemptCB()
