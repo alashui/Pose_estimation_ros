@@ -4,10 +4,10 @@
 class Stopper
 {
   public:
-    const  double FORWARD_SPEED_MPS = 0.5;
-    const  double MIN_SCAN_ANGLE_RAD = -20.0/180*M_PI;
-    const  double MAX_SCAN_ANGLE_RAD = +20.0/180*M_PI;
-    const  float MIN_PROXIMITY_RANGE_M = 0.5;
+    const  double FORWARD_SPEED_MPS = 0.2;
+    const  double MIN_SCAN_ANGLE_RAD = -30.0/180*M_PI;
+    const  double MAX_SCAN_ANGLE_RAD = +30.0/180*M_PI;
+    const  float MIN_PROXIMITY_RANGE_M = 1;
 
     Stopper();
     void startMoving();
@@ -40,13 +40,16 @@ void Stopper::scanCallback(const sensor_msgs::LaserScan::ConstPtr &scan)
 {
     int minIndex=ceil(( MIN_SCAN_ANGLE_RAD - scan->angle_min) / scan-> angle_increment);
     int maxIndex = floor(( MAX_SCAN_ANGLE_RAD - scan->angle_min) / scan-> angle_increment);
+    int maxIndex2=floor((scan->angle_max-scan->angle_min )/scan->angle_increment);
     float closestRange = scan->ranges[minIndex];
-    for (int currIndex = minIndex + 1; currIndex <= maxIndex; currIndex++) 
+    //for (int currIndex = minIndex + 1; currIndex <= maxIndex; currIndex++) 
+    for (int currIndex=0;currIndex < maxIndex2;currIndex++)
     {
         if (scan->ranges[currIndex] < closestRange)
             closestRange = scan->ranges[currIndex];
     
     }
+    ROS_INFO_STREAM("minindex: "<< 0 <<" maxindex2: "<< maxIndex2);
     ROS_INFO_STREAM("Closest range: " << closestRange);
     if (closestRange < MIN_PROXIMITY_RANGE_M) 
     {
