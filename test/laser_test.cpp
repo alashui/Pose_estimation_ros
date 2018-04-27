@@ -5,8 +5,8 @@ class Stopper
 {
   public:
     const  double FORWARD_SPEED_MPS = 0.5;
-    const  double MIN_SCAN_ANGLE_RAD = -30.0/180*M_PI;
-    const  double MAX_SCAN_ANGLE_RAD = +30.0/180*M_PI;
+    const  double MIN_SCAN_ANGLE_RAD = -20.0/180*M_PI;
+    const  double MAX_SCAN_ANGLE_RAD = +20.0/180*M_PI;
     const  float MIN_PROXIMITY_RANGE_M = 0.5;
 
     Stopper();
