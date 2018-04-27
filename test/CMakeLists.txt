@@ -45,6 +45,8 @@ add_executable(motionClient_test motionClient_test.cpp)
 target_link_libraries(motionClient_test ${catkin_LIBRARIES} )
 add_dependencies(motionClient_test ${localization_ros_EXPORTED_TARGETS})
 
-
+add_executable(laser_test laser_test.cpp)
+target_link_libraries(laser_test ${catkin_LIBRARIES} )
+add_dependencies(laser_test ${localization_ros_EXPORTED_TARGETS})
 
 

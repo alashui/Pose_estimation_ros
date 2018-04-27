@@ -1,5 +1,6 @@
 #include <ros/ros.h>
 #include <std_msgs/Float32.h>
+#include <sensor_msgs/LaserScan.h>
 #include <actionlib/client/simple_action_client.h>
 #include <localization_ros/hi_motionAction.h>
 
@@ -23,12 +24,21 @@ typedef actionlib::SimpleActionClient<hi_motionAction> Client;
 
 class hi_motionActClient
 {
+  private:
+	Client ac_;
+	hi_motionGoal goal_;
+
+	ros::NodeHandle nh_;
+	ros::Subscriber laser_scan_sub;
+	
   public:
 	hi_motionActClient(std::string name) : ac_(name, true)
 	{
 		ROS_INFO("Waiting for action server to start.");
 		ac_.waitForServer();
 		ROS_INFO("Action server started, sending goal.");
+				
+		laser_scan_sub = nh_.subscribe("/scan",1,&hi_motionActClient::laserScanCallback,this); 
 	}
 
 	void goalSet(float radius,float angle,float dist)
@@ -68,11 +78,29 @@ class hi_motionActClient
 	    //ROS_INFO("Got Feedback  %f", feedback->angle);
 		ROS_INFO("Got Feedback  %s",feedback->state_motion.c_str());
 	}
-
-private:
-	Client ac_;
-	hi_motionGoal goal_;	
+	
+	void laserScanCallback(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
 };
+
+void hi_motionActClient::laserScanCallback(const sensor_msgs::LaserScan::ConstPtr& laser_scan)
+{
+ /*
+  int minIndex=ceil(( MIN_SCAN_ANGLE_RAD - scan->angle_min) / scan-> angle_increment);
+  int maxIndex = floor(( MAX_SCAN_ANGLE_RAD - scan->angle_min) / scan-> angle_increment);
+  float closestRange = scan->ranges[minIndex];
+  for (int currIndex = minIndex + 1; currIndex <= maxIndex; currIndex++) {
+  if (scan->ranges[currIndex] < closestRange) {
+  closestRange = scan->ranges[currIndex];
+  }
+  }
+  ROS_INFO_STREAM("Closest range: " << closestRange);
+  if (closestRange < MIN_PROXIMITY_RANGE_M) {
+  ROS_INFO("Stop!");
+  keepMoving = false;
+  }
+*/
+}
+
 
 int main (int argc, char **argv)
 {
