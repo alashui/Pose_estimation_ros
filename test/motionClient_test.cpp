@@ -38,8 +38,8 @@ class hi_motionActClient
 	ros::Subscriber laser_scan_sub_;
 	
 	const  double FORWARD_SPEED_MPS = 0.2;
-    const  double MIN_SCAN_ANGLE_RAD = -10.0/180*M_PI;
-    const  double MAX_SCAN_ANGLE_RAD = +10.0/180*M_PI;
+    const  double MIN_SCAN_ANGLE_RAD = -3.0/180*M_PI;
+    const  double MAX_SCAN_ANGLE_RAD = +3.0/180*M_PI;
     const  float MIN_PROXIMITY_RANGE_M = 0.6;
 
 	int collision_warning_count_;
@@ -231,10 +231,10 @@ int main (int argc, char **argv)
 	ros::init(argc, argv, "test_hi_motionAC");
 	hi_motionActClient hi_motionAC("hi_motion");
 
-	hi_motionAC.goalSend(0,(float)360.0*M_PI/180.0,0);
+	hi_motionAC.goalSend(0.4,(float)360.0*M_PI/180.0,0);
 	ros::spin();
 
-	std::ofstream fout("./pose_laser.txt");
+	std::ofstream fout("./pose_laser3.txt");
 	for (auto poselaser: hi_motionAC.poseLaserDatas_vec_)
 	{
 		fout << poselaser.pose_x <<"  "
