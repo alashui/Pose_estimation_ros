@@ -71,7 +71,7 @@ void hi_motionActServ::Start()
 }
 void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goal)
 {
-	if(fabs(goal->rotate_angle) > 0 || goal->foward_dist > 0)
+	if( fabs(goal->rotate_angle) < 0 && goal->foward_dist < 0 )
 	{
 		ROS_INFO("rotate_angle and foward_dist are zero!");
 		if(as_.isActive())

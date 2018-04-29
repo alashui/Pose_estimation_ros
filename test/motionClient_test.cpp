@@ -231,7 +231,7 @@ int main (int argc, char **argv)
 	ros::init(argc, argv, "test_hi_motionAC");
 	hi_motionActClient hi_motionAC("hi_motion");
 
-	hi_motionAC.goalSend(0,360*M_PI/180,0);
+	hi_motionAC.goalSend(0,(float)360.0*M_PI/180.0,0);
 	ros::spin();
 
 	std::ofstream fout("./pose_laser.txt");
