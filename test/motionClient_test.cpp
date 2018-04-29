@@ -38,8 +38,8 @@ class hi_motionActClient
 	ros::Subscriber laser_scan_sub_;
 	
 	const  double FORWARD_SPEED_MPS = 0.2;
-    const  double MIN_SCAN_ANGLE_RAD = -10.0/180*M_PI;
-    const  double MAX_SCAN_ANGLE_RAD = +10.0/180*M_PI;
+    const  double MIN_SCAN_ANGLE_RAD = -5.0/180*M_PI;
+    const  double MAX_SCAN_ANGLE_RAD = +5.0/180*M_PI;
     const  float MIN_PROXIMITY_RANGE_M = 0.6;
 
 	int collision_warning_count_;
@@ -176,7 +176,7 @@ void hi_motionActClient::laserScanCallback(const sensor_msgs::LaserScan::ConstPt
 	pose_laser.pose_theta = tf::getYaw(transform_.getRotation());
 	
 	if(	(!pose_laser_init_) ||  //第一次扫描必须记录,之后运动过一定距离才记录一次
-		(fabs ( angleToTarget(pose_laser_.pose_theta , pose_laser.pose_theta) ) >= (M_PI * 20.0/180) ) ||
+		(fabs ( angleToTarget(pose_laser_.pose_theta , pose_laser.pose_theta) ) >= (M_PI * 10.0/180) ) ||
 		(  pow((pose_laser.pose_x-pose_laser_.pose_x),2) +  
 		   pow((pose_laser.pose_y-pose_laser_.pose_y),2)    ) >= 0.1  	)
 	{
@@ -268,7 +268,7 @@ int main (int argc, char **argv)
 	ros::init(argc, argv, "test_hi_motionAC");
 	hi_motionActClient hi_motionAC("hi_motion");
 
-	hi_motionAC.goalSend(0.4,(float)360.0*M_PI/180.0,0);
+	hi_motionAC.goalSend(0,(float)360.0*M_PI/180.0,0);
 	ros::spin();
 
 
@@ -278,7 +278,7 @@ int main (int argc, char **argv)
 	{
 		fout << poselaser.pose_x <<"  "
 			 << poselaser.pose_y <<"  "
-			 << poselaser.pose_theta <<"  "
+			 << poselaser.pose_theta <<"  " << (poselaser.pose_theta/M_PI) *180 <<"  "
 			 << poselaser.laser_range <<std::endl;
 		
 		
