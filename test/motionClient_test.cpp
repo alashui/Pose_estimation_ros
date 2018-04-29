@@ -38,8 +38,8 @@ class hi_motionActClient
 	ros::Subscriber laser_scan_sub_;
 	
 	const  double FORWARD_SPEED_MPS = 0.2;
-    const  double MIN_SCAN_ANGLE_RAD = -3.0/180*M_PI;
-    const  double MAX_SCAN_ANGLE_RAD = +3.0/180*M_PI;
+    const  double MIN_SCAN_ANGLE_RAD = -10.0/180*M_PI;
+    const  double MAX_SCAN_ANGLE_RAD = +10.0/180*M_PI;
     const  float MIN_PROXIMITY_RANGE_M = 0.6;
 
 	int collision_warning_count_;
@@ -72,6 +72,9 @@ class hi_motionActClient
 	bool goalSend(float radius,float angle,float dist);
 	void laserScanCallback(const sensor_msgs::LaserScan::ConstPtr& laser_scan);
 	static double angleToTarget(double theta_current,double theta_target);//计算到目标角度需要转过的角度
+
+	void selfLocalization();
+	void explore();
 
 	void doneCb(const actionlib::SimpleClientGoalState& state,
 		        const hi_motionResultConstPtr& result )
@@ -173,7 +176,7 @@ void hi_motionActClient::laserScanCallback(const sensor_msgs::LaserScan::ConstPt
 	pose_laser.pose_theta = tf::getYaw(transform_.getRotation());
 	
 	if(	(!pose_laser_init_) ||  //第一次扫描必须记录,之后运动过一定距离才记录一次
-		(fabs(pose_laser.pose_theta-pose_laser_.pose_theta) >= (M_PI * 5.0/180) ) ||
+		(fabs ( angleToTarget(pose_laser_.pose_theta , pose_laser.pose_theta) ) >= (M_PI * 20.0/180) ) ||
 		(  pow((pose_laser.pose_x-pose_laser_.pose_x),2) +  
 		   pow((pose_laser.pose_y-pose_laser_.pose_y),2)    ) >= 0.1  	)
 	{
@@ -226,6 +229,40 @@ double hi_motionActClient::angleToTarget(double theta_current,double theta_targe
 	return (theta_target - theta_current);
 }
 
+void hi_motionActClient::selfLocalization()
+{
+	//首先原地转一圈
+	goalSend(0,(float)360.0*M_PI/180.0,0);
+	ros::spin();
+
+	//分析周围环境数据
+	bool spacious_flag(false); //周围360度各方向离障碍物的距离都>3m
+	bool half_spacious_flag(false); //周围360度有一半方向离障碍物的距离都>3m
+
+	int count2_temp(0);
+	int count3_temp(0);
+	for (auto poselaser: poseLaserDatas_vec_)
+	{
+		if( poselaser.laser_range >= 3)
+		{
+			count3_temp++;
+			count2_temp++;
+		}			
+		else if( poselaser.laser_range >= 2)
+		{
+			count3_temp=0;
+			count2_temp++;
+		}
+		//else if( )	
+		
+	}
+
+}
+void hi_motionActClient::explore()
+{
+
+}
+
 int main (int argc, char **argv)
 {
 	ros::init(argc, argv, "test_hi_motionAC");
@@ -233,6 +270,8 @@ int main (int argc, char **argv)
 
 	hi_motionAC.goalSend(0.4,(float)360.0*M_PI/180.0,0);
 	ros::spin();
+
+
 
 	std::ofstream fout("./pose_laser3.txt");
 	for (auto poselaser: hi_motionAC.poseLaserDatas_vec_)
@@ -247,6 +286,10 @@ int main (int argc, char **argv)
 	fout <<"num :  "<<hi_motionAC.poseLaserDatas_vec_.size()<<std::endl;
 	fout.close();
 	return 0;
+
+
+
+
 }
 
 
