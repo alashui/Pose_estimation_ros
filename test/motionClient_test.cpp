@@ -8,6 +8,8 @@
 #include <tf/transform_listener.h>
 #include <nav_msgs/Odometry.h>
 #include <vector>
+
+#include <fstream>
 /*
 #goal definition
 float32 rotate_radius
@@ -210,14 +212,18 @@ int main (int argc, char **argv)
 	hi_motionAC.goalSend(0,360,0);
 	ros::spin();
 
+	std::ofstream fout("./pose_laser.txt");
 	for (auto poselaser: hi_motionAC.poseLaserDatas_vec_)
 	{
-		std::cout <<"pose_x: " << poselaser.pose_x <<std::endl;
-		std::cout <<"pose_y: "<< poselaser.pose_y <<std::endl;
-		std::cout <<"pose_theta: "<< poselaser.pose_theta <<std::endl;
-		std::cout <<"laser_range: " << poselaser.laser_range <<std::endl;
+		fout << poselaser.pose_x <<"  "
+			 << poselaser.pose_y <<"  "
+			 << poselaser.pose_theta <<"  "
+			 << poselaser.laser_range <<std::endl;
+		
+		
 	}
-
+	fout <<"num :  "<<hi_motionAC.poseLaserDatas_vec_.size()<<std::endl;
+	fout.close();
 	return 0;
 }
 
