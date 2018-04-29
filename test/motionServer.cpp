@@ -71,10 +71,19 @@ void hi_motionActServ::Start()
 }
 void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goal)
 {
+	if(fabs(goal->rotate_angle) > 0 || goal->foward_dist > 0)
+	{
+		ROS_INFO("rotate_angle and foward_dist are zero!");
+		if(as_.isActive())
+			as_.setSucceeded(result_);
+		ROS_INFO("move ended!");
+		return;
+	}
+	
 	ROS_INFO("goal:rotate %f degree with radius %f,and foward %f m",
 				(goal->rotate_angle*180)/M_PI,goal->rotate_radius,goal->foward_dist);
 
-	//signal(SIGINT, shutdown);
+	//signal(SIGINT, shutdown)
 	ROS_INFO("move!!!...");
 
 //任务执行过程
@@ -110,9 +119,9 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 	geometry_msgs::Twist speed;
 
 	//旋转过程
-	if(goal->rotate_radius >= 0)
+	if(goal->rotate_radius >= 0 && fabs(goal->rotate_angle) >0 )
 	{
-		speed.angular.z = angular_speed_; // 设置角速度，正为左转，负为右转
+		speed.angular.z = angular_speed_ * ((goal->rotate_angle > 0)? 1:-1); // 设置角速度，正为左转，负为右转
 		speed.linear.x = goal->rotate_radius*angular_speed_; //r=v/w
 		while(speed.linear.x > MAX_linear_speed_)  //超过最大线速度则调小角速度
 		{
@@ -145,7 +154,7 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 		ros::Duration(1).sleep(); // sleep for  a second
 	}
 	//直走过程
-	if(goal->foward_dist > 0)
+	if(goal->foward_dist > 0)  //直行距离必须大于零,不能后退
 	{
 		speed.linear.x=linear_speed_ ;
 		speed.angular.z =0;
