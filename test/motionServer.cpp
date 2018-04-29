@@ -85,9 +85,9 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 	std::string base_frame;
 	try
 	{
-	listener.waitForTransform(odom_frame, "/base_footprint", ros::Time(), ros::Duration(2.0) );
-	base_frame = "/base_footprint";
-	ROS_INFO("base_frame = /base_footprint");
+		listener.waitForTransform(odom_frame, "/base_footprint", ros::Time(), ros::Duration(2.0) );
+		base_frame = "/base_footprint";
+		ROS_INFO("base_frame = /base_footprint");
 	}
 	catch (tf::TransformException & ex)
 	{
