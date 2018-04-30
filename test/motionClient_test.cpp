@@ -56,6 +56,8 @@ class hi_motionActClient
 
 	struct PoseLaserData 
 	{
+		int index;
+
 		float pose_x;
 		float pose_y;
 		double pose_theta;
@@ -171,6 +173,7 @@ void hi_motionActClient::laserScanCallback(const sensor_msgs::LaserScan::ConstPt
 	//记录传感器数据及对应位姿
 	PoseLaserData pose_laser;
 	listener_.lookupTransform(odom_frame_, base_frame_, ros::Time(0), transform_);
+	
 	pose_laser.pose_x = transform_.getOrigin().x();
 	pose_laser.pose_y = transform_.getOrigin().y();
 	pose_laser.pose_theta = tf::getYaw(transform_.getRotation());
@@ -202,8 +205,14 @@ void hi_motionActClient::laserScanCallback(const sensor_msgs::LaserScan::ConstPt
 		}
 		pose_laser.laser_range = closestRange;
 
+
+		if(!pose_laser_init_)
+		{ 
+			pose_laser_init_=true;
+			pose_laser_.index=0;
+		}
+		pose_laser.index = pose_laser_.index+1;
 		pose_laser_ = pose_laser;
-		if(!pose_laser_init_) pose_laser_init_=true;
 		poseLaserDatas_vec_.push_back(pose_laser_);
 
 		//避免碰撞
@@ -232,31 +241,156 @@ double hi_motionActClient::angleToTarget(double theta_current,double theta_targe
 void hi_motionActClient::selfLocalization()
 {
 	//首先原地转一圈
-	goalSend(0,(float)360.0*M_PI/180.0,0);
-	ros::spin();
+	//goalSend(0,(float)360.0*M_PI/180.0,0);
+	//ros::spin();
 
-	//分析周围环境数据
-	bool spacious_flag(false); //周围360度各方向离障碍物的距离都>3m
-	bool half_spacious_flag(false); //周围360度有一半方向离障碍物的距离都>3m
+	//统计分析周围环境数据
+	std::vector<std::vector<PoseLaserData> > poselaser_range3_vec(3);
 
-	int count2_temp(0);
-	int count3_temp(0);
 	for (auto poselaser: poseLaserDatas_vec_)
 	{
 		if( poselaser.laser_range >= 3)
 		{
-			count3_temp++;
-			count2_temp++;
+			poselaser_range3_vec[0].push_back(poselaser);
+			poselaser_range3_vec[1].push_back(poselaser);
+			poselaser_range3_vec[2].push_back(poselaser);
 		}			
+		else if( poselaser.laser_range >= 2.5)
+		{
+			poselaser_range3_vec[1].push_back(poselaser);
+			poselaser_range3_vec[2].push_back(poselaser);
+		}
 		else if( poselaser.laser_range >= 2)
 		{
-			count3_temp=0;
-			count2_temp++;
+			poselaser_range3_vec[2].push_back(poselaser);
 		}
-		//else if( )	
 		
 	}
 
+	bool moved_flag(false);
+	//如果周围空旷则走两个圆形,左侧一个,右侧一个,呈八字形
+	for(int i=0;i<3;i++)
+	{
+		if( poselaser_range3_vec[i].size() == poseLaserDatas_vec_.size()) 
+		{
+			float radius_temp(0);
+			switch(i)
+			{
+				case 0: radius_temp=0.9;break;   //所有扫描距离都大于3m
+				case 1: radius_temp=0.65;break;  //所有扫描距离都大于2.5m
+				case 2: radius_temp=0.4;break;   //所有扫描距离都大于2m
+			}
+
+			std::cout << "next(all clear): rotate 360 with radius " <<radius_temp <<std::endl;
+/*
+			goalSend(radius_temp,360.0*M_PI/180.0,0);
+			ros::spin();
+			goalSend(radius_temp,-360.0*M_PI/180.0,0);
+			ros::spin();
+*/
+			moved_flag =true;
+			break;
+		}
+	}
+	if(moved_flag) return; 
+
+	for(int i=0;i<3;i++)
+	{
+		if(poselaser_range3_vec[i].size()>0)
+		{						
+			//找到每组连续扫描到大于(3m/2.5m/2m) 的数据,记录索引
+			std::vector<int> index_vec;
+			std::vector<std::vector<int> > index_vecvec;
+			int index_temp((* poselaser_range3_vec[i].begin()).index);
+			for(auto poselaser:poselaser_range3_vec[i])
+			{
+				if(poselaser.index==index_temp)
+					index_vec.push_back( index_temp++ );
+				else 
+				{
+					index_vecvec.push_back(index_vec);
+					index_vec.clear();
+				}
+				
+			}
+			//如果首位组为同一组(扫描距离都大于3m/2.5m/2m)则合并为一组
+			if((*index_vecvec.begin())[0]==(*index_vecvec.end())[0])
+			{
+				for(auto vec_temp : (*index_vecvec.begin()) )
+				{
+					(*index_vecvec.end()).push_back(vec_temp);
+				}
+				
+				index_vecvec.erase(index_vecvec.begin());
+			}
+
+			std::vector<int> * index_vec_mostPtr; //确定含有数据最多的一组
+			int index_vec_Maxsize((*index_vecvec.begin()).size());
+			for (auto index_vec_temp:index_vecvec)
+			{
+				if(index_vec_temp.size() > index_vec_Maxsize)
+				{
+					index_vec_Maxsize = index_vec_temp.size();
+					index_vec_mostPtr = &index_vec_temp;
+				}
+					
+			}
+
+			//如果最多的这组数据有一半以上的数据,说明机器人周围有一半以上的方向在3m/2.5m/2m范围内无障碍物
+			//此时控制机器人在合适的方向绕安全半径旋转一周
+			if(index_vec_Maxsize > poseLaserDatas_vec_.size()/2)
+			{
+				//有一半方向空旷
+				//找到起始索引,旋转到这个方向然后走个圆形
+				double angle = angleToTarget( (*poseLaserDatas_vec_.end()).pose_theta,
+								(poseLaserDatas_vec_[(*index_vec_mostPtr)[0]-1]).pose_theta);
+				if (fabs(angle)>0)
+				{
+/*
+					goalSend(0,angle,0);   //先旋转到合适方向
+					ros::spin();
+*/					std::cout << "next(half): rotate " <<angle*180/M_PI <<" with radius 0 and ";
+				}
+
+				float radius_temp(0);
+				switch(i)
+				{
+					case 0: radius_temp=0.9;break;   //所有扫描距离都大于3m
+					case 1: radius_temp=0.65;break;  //所有扫描距离都大于2.5m
+					case 2: radius_temp=0.4;break;   //所有扫描距离都大于2m
+				}
+/*
+				goalSend(0.9,360.0*M_PI/180.0,0);  //按合适半径走圆形
+				ros::spin();
+*/				std::cout << "next(half): rotate 360 with radius " <<radius_temp <<std::endl;
+				break;
+				
+			}
+			//机器人周围只有某些方向在3m/2.5m/2m范围内无障碍物,则朝无障碍物方向前进1m
+			else if (index_vec_Maxsize >= 3)
+			{
+				//找到中间索引,旋转到这个方向然后朝这个方向直行一米
+				int index_temp3();
+				double angle = angleToTarget( (*poseLaserDatas_vec_.end()).pose_theta,
+								(poseLaserDatas_vec_[(*index_vec_mostPtr)[index_vec_Maxsize/2]]).pose_theta);
+
+				if (fabs(angle)>0)
+				{
+/*
+					goalSend(0,angle,0);   //先旋转到合适方向
+					ros::spin();
+*/				    std::cout << "next(once): rotate " <<angle *180/M_PI <<" with radius 0 and ";	
+				}
+/*
+				goalSend(0,0,1);	//前进一米
+				ros::spin();
+*/				std::cout << "next(half): foward " << 1 <<" m ";
+				break;
+
+			}
+
+		}
+	}
 }
 void hi_motionActClient::explore()
 {
@@ -279,16 +413,11 @@ int main (int argc, char **argv)
 		fout << poselaser.pose_x <<"  "
 			 << poselaser.pose_y <<"  "
 			 << poselaser.pose_theta <<"  " << (poselaser.pose_theta/M_PI) *180 <<"  "
-			 << poselaser.laser_range <<std::endl;
-		
-		
+			 << poselaser.laser_range <<std::endl;		
 	}
 	fout <<"num :  "<<hi_motionAC.poseLaserDatas_vec_.size()<<std::endl;
 	fout.close();
 	return 0;
-
-
-
 
 }
 
