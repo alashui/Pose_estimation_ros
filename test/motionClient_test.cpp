@@ -46,6 +46,7 @@ class hi_motionActClient
 
   public:
   	bool goalSended_flag_ ;
+	bool actionServe_enable_;
 
   	tf::TransformListener listener_;
 	tf::StampedTransform transform_;
@@ -85,7 +86,10 @@ class hi_motionActClient
 		goalSended_flag_=false;
 		//ROS_INFO("Answer: %f", result->ranges.back());
 		//ROS_INFO("Answer: %f", result->angles.back());
-		ros::shutdown();
+
+		actionServe_enable_=true;
+
+		//ros::shutdown();
 	}
 	// Called once when the goal becomes active
 	void activeCb()
@@ -109,7 +113,8 @@ hi_motionActClient::hi_motionActClient(std::string name) :ac_(name, true),
 														  odom_frame_("/odom"),
 														  tf_base_enable_(false),
 														  goalSended_flag_ (false),
-														  pose_laser_init_(false)
+														  pose_laser_init_(false),
+														  actionServe_enable_(true)
 {
 	ROS_INFO("Waiting for action server to start.");
 	ac_.waitForServer();
@@ -163,6 +168,7 @@ bool hi_motionActClient::goalSend(float radius,float angle,float dist)
 				boost::bind(&hi_motionActClient::feedbackCb,this, _1) );
 
 	goalSended_flag_= true;
+	actionServe_enable_ = false; 
 	return true;
 }
 void hi_motionActClient::laserScanCallback(const sensor_msgs::LaserScan::ConstPtr& scan)
@@ -244,6 +250,7 @@ void hi_motionActClient::selfLocalization()
 	//goalSend(0,(float)360.0*M_PI/180.0,0);
 	//ros::spin();
 
+
 	//统计分析周围环境数据
 	std::vector<std::vector<PoseLaserData> > poselaser_range3_vec(3);
 
@@ -284,9 +291,9 @@ void hi_motionActClient::selfLocalization()
 			std::cout << "next(all clear): rotate 360 with radius " <<radius_temp <<std::endl;
 
 			goalSend(radius_temp,360.0*M_PI/180.0,0);
-			ros::spin();
+			while(!actionServe_enable_);//等待该任务执行完
 			goalSend(radius_temp,-360.0*M_PI/180.0,0);
-			ros::spin();
+			while(!actionServe_enable_);//等待该任务执行完
 
 			moved_flag =true;
 			break;
@@ -326,11 +333,11 @@ void hi_motionActClient::selfLocalization()
 			}
 			//如果首组包含第一次扫描的数据，尾组包含最后一次扫描的数据则这两组为连续（360=0），合并为同一组
 			if( (*index_vecvec.begin())[0]==(*poseLaserDatas_vec_.begin()).index  &&
-			    (*index_vecvec.end())[0] == (*poseLaserDatas_vec_.end() ).index     )
+			    (*(index_vecvec.end()-1))[0] == (*(poseLaserDatas_vec_.end()-1) ).index     )
 			{
 				for(auto vec_temp : (*index_vecvec.begin()) )
 				{
-					(*index_vecvec.end()).push_back(vec_temp);
+					(*(index_vecvec.end()-1)).push_back(vec_temp);
 				}
 				
 				index_vecvec.erase(index_vecvec.begin());
@@ -355,14 +362,14 @@ void hi_motionActClient::selfLocalization()
 			{
 				//有一半方向空旷
 				//找到起始索引,旋转到这个方向然后走个圆形
-				double angle = angleToTarget( (*poseLaserDatas_vec_.end()).pose_theta,
+				double angle = angleToTarget( (*(poseLaserDatas_vec_.end()-1)).pose_theta,
 								(poseLaserDatas_vec_[index_vecvec[Maxsize_index][0]-1]).pose_theta);
 				if (fabs(angle)>0)
 				{
-
-					goalSend(0,angle,0);   //先旋转到合适方向
-					ros::spin();
 					std::cout << "next(half): rotate " <<angle*180/M_PI <<" with radius 0 and ";
+					goalSend(0,angle,0);   //先旋转到合适方向
+					while(!actionServe_enable_);//等待该任务执行完
+					
 				}
 
 				float radius_temp(0);
@@ -373,9 +380,10 @@ void hi_motionActClient::selfLocalization()
 					case 2: radius_temp=0.4;break;   //所有扫描距离都大于2m
 				}
 
-				goalSend(0.9,360.0*M_PI/180.0,0);  //按合适半径走圆形
-				ros::spin();
 				std::cout << "next(half): rotate 360 with radius " <<radius_temp <<std::endl;
+				goalSend(0.9,360.0*M_PI/180.0,0);  //按合适半径走圆形
+				while(!actionServe_enable_);//等待该任务执行完
+				
 				break;
 				
 			}
@@ -385,25 +393,28 @@ void hi_motionActClient::selfLocalization()
 				//找到中间索引,旋转到这个方向然后朝这个方向直行一米
 				int index_temp3();
 				
-				double angle_current ((*(poseLaserDatas_vec_.end()-1)).pose_theta);
-				double angle_target  ((poseLaserDatas_vec_[index_vecvec[Maxsize_index][index_vec_Maxsize/2]-1]).pose_theta);
+				//double angle_current ((*(poseLaserDatas_vec_.end()-1)).pose_theta);
+				//double angle_target  ((poseLaserDatas_vec_[index_vecvec[Maxsize_index][index_vec_Maxsize/2]-1]).pose_theta);
 				
-				double angle = angleToTarget(angle_current,angle_target);
-				angle = (angle<M_PI) ? angle : (angle-2*M_PI);
-				//double angle = angleToTarget( (*poseLaserDatas_vec_.end()).pose_theta,
-				//				(poseLaserDatas_vec_[index_vecvec[Maxsize_index][index_vec_Maxsize/2]-1]).pose_theta);
+				//double angle = angleToTarget(angle_current,angle_target);
+				
+				double angle = angleToTarget( (*(poseLaserDatas_vec_.end()-1)).pose_theta,
+								(poseLaserDatas_vec_[index_vecvec[Maxsize_index][index_vec_Maxsize/2]-1]).pose_theta);
 
 				if (fabs(angle)>0)
 				{
+					angle = (angle<M_PI) ? angle : (angle-2*M_PI);
 
+					std::cout << "next(once): rotate " <<angle *180/M_PI <<" with radius 0 and ";	
 					goalSend(0,angle,0);   //先旋转到合适方向
-					ros::spin();
-				    std::cout << "next(once): rotate " <<angle *180/M_PI <<" with radius 0 and ";	
+					while(!actionServe_enable_);//等待该任务执行完
+				    
 				}
 
-				goalSend(0,0,1);	//前进一米
-				ros::spin();
 				std::cout << "next(once): foward " << 1 <<" m ";
+				goalSend(0,0,1);	//前进一米
+				while(!actionServe_enable_);//等待该任务执行完
+				
 				break;
 
 			}
@@ -415,16 +426,21 @@ void hi_motionActClient::explore()
 {
 
 }
-
+void spinThread()
+{
+  ros::spin();
+}
 int main (int argc, char **argv)
 {
 	ros::init(argc, argv, "test_hi_motionAC");
 	hi_motionActClient hi_motionAC("hi_motion");
 
+	boost::thread spin_thread(&spinThread);
+
 	hi_motionAC.goalSend(0,(float)360.0*M_PI/180.0,0);
-	ros::spin();
+	while(!hi_motionAC.actionServe_enable_);//等待该任务执行完
 
-
+	
 	hi_motionAC.selfLocalization();
 
 	std::ofstream fout("./pose_laser3.txt");
@@ -433,7 +449,7 @@ int main (int argc, char **argv)
 		fout << poselaser.pose_x <<"  "
 			 << poselaser.pose_y <<"  "
 			 << poselaser.pose_theta <<"  " << (poselaser.pose_theta/M_PI) *180 <<"  "
-			 << poselaser.laser_range <<std::endl;		
+			 << poselaser.laser_range << std::endl;		
 	}
 	fout <<"num :  "<<hi_motionAC.poseLaserDatas_vec_.size()<<std::endl;
 	fout.close();
