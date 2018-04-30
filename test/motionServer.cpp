@@ -102,9 +102,9 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 	{
 		try
 		{
-		listener.waitForTransform(odom_frame, "/base_link", ros::Time(), ros::Duration(2.0) );
-		base_frame = "/base_link";
-		ROS_INFO("base_frame = /base_link");
+			listener.waitForTransform(odom_frame, "/base_link", ros::Time(), ros::Duration(2.0) );
+			base_frame = "/base_link";
+			ROS_INFO("base_frame = /base_link");
 		}
 		catch (tf::TransformException ex)
 		{

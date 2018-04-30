@@ -221,7 +221,7 @@ void hi_motionActClient::laserScanCallback(const sensor_msgs::LaserScan::ConstPt
 		pose_laser_ = pose_laser;
 		poseLaserDatas_vec_.push_back(pose_laser_);
 
-		//避免碰撞
+		//避免碰撞 ,连续三次小于允许最近接近距离则停下
 		ROS_INFO_STREAM("Closest range: " << closestRange);
 		if (closestRange < MIN_PROXIMITY_RANGE_M) 
 		{
@@ -234,6 +234,7 @@ void hi_motionActClient::laserScanCallback(const sensor_msgs::LaserScan::ConstPt
 
 			//keepMoving = false;
 		}
+		else collision_warning_count_=0;
 	}
 }
 double hi_motionActClient::angleToTarget(double theta_current,double theta_target)//计算到目标角度需要转过的角度
@@ -247,8 +248,8 @@ double hi_motionActClient::angleToTarget(double theta_current,double theta_targe
 void hi_motionActClient::selfLocalization()
 {
 	//首先原地转一圈
-	//goalSend(0,(float)360.0*M_PI/180.0,0);
-	//ros::spin();
+	goalSend(0,360.0*M_PI/180.0,0);
+	while(!actionServe_enable_);//等待该任务执行完
 
 
 	//统计分析周围环境数据
@@ -437,12 +438,11 @@ int main (int argc, char **argv)
 
 	boost::thread spin_thread(&spinThread);
 
-	hi_motionAC.goalSend(0,360.0*M_PI/180.0,0);
-	while(!hi_motionAC.actionServe_enable_);//等待该任务执行完
+	for (int i=0;i<10;i++)
+		hi_motionAC.selfLocalization();
 
-	
-	hi_motionAC.selfLocalization();
 
+/*
 	std::ofstream fout("./pose_laser3.txt");
 	for (auto poselaser: hi_motionAC.poseLaserDatas_vec_)
 	{
@@ -453,6 +453,8 @@ int main (int argc, char **argv)
 	}
 	fout <<"num :  "<<hi_motionAC.poseLaserDatas_vec_.size()<<std::endl;
 	fout.close();
+*/
+
 	return 0;
 
 }
