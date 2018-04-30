@@ -437,7 +437,7 @@ int main (int argc, char **argv)
 
 	boost::thread spin_thread(&spinThread);
 
-	hi_motionAC.goalSend(0,(float)360.0*M_PI/180.0,0);
+	hi_motionAC.goalSend(0,360.0*M_PI/180.0,0);
 	while(!hi_motionAC.actionServe_enable_);//等待该任务执行完
 
 	

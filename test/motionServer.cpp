@@ -132,7 +132,7 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 		listener.lookupTransform(odom_frame, base_frame, ros::Time(0), transform);   
 		double last_angle = fabs(tf::getYaw(transform.getRotation()));//Track the last angle measured   
 		double turn_angle = 0;//Track how far we have turned
-		while( (fabs(turn_angle + angular_tolerance_) < goal->rotate_angle) && (ros::ok()) )
+		while( (fabs(turn_angle + angular_tolerance_) < fabs(goal->rotate_angle) ) && (ros::ok()) )
 		{
 			if(!as_.isActive())break;//判断任务是否还要执行
 
