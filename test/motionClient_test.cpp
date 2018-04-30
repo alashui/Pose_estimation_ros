@@ -282,12 +282,12 @@ void hi_motionActClient::selfLocalization()
 			}
 
 			std::cout << "next(all clear): rotate 360 with radius " <<radius_temp <<std::endl;
-/*
+
 			goalSend(radius_temp,360.0*M_PI/180.0,0);
 			ros::spin();
 			goalSend(radius_temp,-360.0*M_PI/180.0,0);
 			ros::spin();
-*/
+
 			moved_flag =true;
 			break;
 		}
@@ -302,19 +302,31 @@ void hi_motionActClient::selfLocalization()
 			std::vector<int> index_vec;
 			std::vector<std::vector<int> > index_vecvec;
 			int index_temp((* poselaser_range3_vec[i].begin()).index);
-			for(auto poselaser:poselaser_range3_vec[i])
+			
+			for (int jj=0;jj<poselaser_range3_vec[i].size();jj++)
+			//for(auto poselaser:poselaser_range3_vec[i])
 			{
-				if(poselaser.index==index_temp)
+				if(poselaser_range3_vec[i][jj].index==index_temp)
 					index_vec.push_back( index_temp++ );
 				else 
 				{
+					
 					index_vecvec.push_back(index_vec);
 					index_vec.clear();
+					index_temp=poselaser_range3_vec[i][jj].index;
+					index_vec.push_back( index_temp++ );
+				}
+				
+				if(jj==poselaser_range3_vec[i].size()-1)
+				{
+					index_vecvec.push_back(index_vec);
+					index_vec.clear();					
 				}
 				
 			}
-			//如果首位组为同一组(扫描距离都大于3m/2.5m/2m)则合并为一组
-			if((*index_vecvec.begin())[0]==(*index_vecvec.end())[0])
+			//如果首组包含第一次扫描的数据，尾组包含最后一次扫描的数据则这两组为连续（360=0），合并为同一组
+			if( (*index_vecvec.begin())[0]==(*poseLaserDatas_vec_.begin()).index  &&
+			    (*index_vecvec.end())[0] == (*poseLaserDatas_vec_.end() ).index     )
 			{
 				for(auto vec_temp : (*index_vecvec.begin()) )
 				{
@@ -324,14 +336,15 @@ void hi_motionActClient::selfLocalization()
 				index_vecvec.erase(index_vecvec.begin());
 			}
 
-			std::vector<int> * index_vec_mostPtr; //确定含有数据最多的一组
+			int Maxsize_index(0); //确定含有数据最多的一组
 			int index_vec_Maxsize((*index_vecvec.begin()).size());
-			for (auto index_vec_temp:index_vecvec)
+			for (int kk =0;kk <index_vecvec.size();kk++)
+			//for (auto index_vec_temp:index_vecvec)
 			{
-				if(index_vec_temp.size() > index_vec_Maxsize)
+				if(index_vecvec[kk].size() > index_vec_Maxsize)
 				{
-					index_vec_Maxsize = index_vec_temp.size();
-					index_vec_mostPtr = &index_vec_temp;
+					index_vec_Maxsize = index_vecvec[kk].size();
+					Maxsize_index = kk;
 				}
 					
 			}
@@ -343,13 +356,13 @@ void hi_motionActClient::selfLocalization()
 				//有一半方向空旷
 				//找到起始索引,旋转到这个方向然后走个圆形
 				double angle = angleToTarget( (*poseLaserDatas_vec_.end()).pose_theta,
-								(poseLaserDatas_vec_[(*index_vec_mostPtr)[0]-1]).pose_theta);
+								(poseLaserDatas_vec_[index_vecvec[Maxsize_index][0]-1]).pose_theta);
 				if (fabs(angle)>0)
 				{
-/*
+
 					goalSend(0,angle,0);   //先旋转到合适方向
 					ros::spin();
-*/					std::cout << "next(half): rotate " <<angle*180/M_PI <<" with radius 0 and ";
+					std::cout << "next(half): rotate " <<angle*180/M_PI <<" with radius 0 and ";
 				}
 
 				float radius_temp(0);
@@ -359,10 +372,10 @@ void hi_motionActClient::selfLocalization()
 					case 1: radius_temp=0.65;break;  //所有扫描距离都大于2.5m
 					case 2: radius_temp=0.4;break;   //所有扫描距离都大于2m
 				}
-/*
+
 				goalSend(0.9,360.0*M_PI/180.0,0);  //按合适半径走圆形
 				ros::spin();
-*/				std::cout << "next(half): rotate 360 with radius " <<radius_temp <<std::endl;
+				std::cout << "next(half): rotate 360 with radius " <<radius_temp <<std::endl;
 				break;
 				
 			}
@@ -371,20 +384,26 @@ void hi_motionActClient::selfLocalization()
 			{
 				//找到中间索引,旋转到这个方向然后朝这个方向直行一米
 				int index_temp3();
-				double angle = angleToTarget( (*poseLaserDatas_vec_.end()).pose_theta,
-								(poseLaserDatas_vec_[(*index_vec_mostPtr)[index_vec_Maxsize/2]]).pose_theta);
+				
+				double angle_current ((*(poseLaserDatas_vec_.end()-1)).pose_theta);
+				double angle_target  ((poseLaserDatas_vec_[index_vecvec[Maxsize_index][index_vec_Maxsize/2]-1]).pose_theta);
+				
+				double angle = angleToTarget(angle_current,angle_target);
+				angle = (angle<M_PI) ? angle : (angle-2*M_PI);
+				//double angle = angleToTarget( (*poseLaserDatas_vec_.end()).pose_theta,
+				//				(poseLaserDatas_vec_[index_vecvec[Maxsize_index][index_vec_Maxsize/2]-1]).pose_theta);
 
 				if (fabs(angle)>0)
 				{
-/*
+
 					goalSend(0,angle,0);   //先旋转到合适方向
 					ros::spin();
-*/				    std::cout << "next(once): rotate " <<angle *180/M_PI <<" with radius 0 and ";	
+				    std::cout << "next(once): rotate " <<angle *180/M_PI <<" with radius 0 and ";	
 				}
-/*
+
 				goalSend(0,0,1);	//前进一米
 				ros::spin();
-*/				std::cout << "next(half): foward " << 1 <<" m ";
+				std::cout << "next(once): foward " << 1 <<" m ";
 				break;
 
 			}
@@ -406,6 +425,7 @@ int main (int argc, char **argv)
 	ros::spin();
 
 
+	hi_motionAC.selfLocalization();
 
 	std::ofstream fout("./pose_laser3.txt");
 	for (auto poselaser: hi_motionAC.poseLaserDatas_vec_)
