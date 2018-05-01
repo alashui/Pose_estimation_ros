@@ -186,8 +186,8 @@ void hi_motionActClient::laserScanCallback(const sensor_msgs::LaserScan::ConstPt
 	
 	if(	(!pose_laser_init_) ||  //第一次扫描必须记录,之后运动过一定距离才记录一次
 		(fabs ( angleToTarget(pose_laser_.pose_theta , pose_laser.pose_theta) ) >= (M_PI * 10.0/180) ) ||
-		(  pow((pose_laser.pose_x-pose_laser_.pose_x),2) +  
-		   pow((pose_laser.pose_y-pose_laser_.pose_y),2)    ) >= 0.1  	)
+		( sqrt( pow((pose_laser.pose_x-pose_laser_.pose_x),2) +  
+		   		pow((pose_laser.pose_y-pose_laser_.pose_y),2)   )   ) >= 0.1  	)
 	{
 		//找到该次扫描中最近的距离
 		int minIndex=ceil(( MIN_SCAN_ANGLE_RAD - scan->angle_min) / scan-> angle_increment);
@@ -349,7 +349,6 @@ void hi_motionActClient::selfLocalization()
 			}
 
 			//int Maxsize_index(0); //确定含有数据最多的一组
-
 			//int index_vec_Maxsize((*index3_vecvecvec[i].begin()).size());//这一组有多少个数据
 
 			index_vec3_Maxsize[i] =  (*index3_vecvecvec[i].begin()).size();
@@ -427,8 +426,17 @@ void hi_motionActClient::selfLocalization()
 				    
 				}
 
+				float foward_distance(1.0);
+				/*
+				switch(i)
+				{
+					case 0: foward_distance = 2;break;   //所有扫描距离都大于3m
+					case 1: foward_distance = 1.5;break;  //所有扫描距离都大于2.5m
+					case 2: foward_distance = 1;break;   //所有扫描距离都大于2m
+				}
+				*/
 				std::cout << "next(once): foward " << 1 <<" m ";
-				goalSend(0,0,1);	//前进一米
+				goalSend(0,0,foward_distance);	//前进一米
 				while(!actionServe_enable_);//等待该任务执行完
 
 				moved_flag =true;
