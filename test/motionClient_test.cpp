@@ -302,24 +302,28 @@ void hi_motionActClient::selfLocalization()
 	}
 	if(moved_flag) return; 
 
+	std::vector<std::vector<std::vector<int> > > index3_vecvecvec(3);//连续扫描到大于(3m/2.5m/2m) 的数据记为一组,记录索引
+	std::vector<int > Maxsize_index3_vec(3);//确定含有数据最多的一组
+	std::vector<int >index_vec3_Maxsize(3);//这一组有多少个数据
+
 	for(int i=0;i<3;i++)
 	{
 		if(poselaser_range3_vec[i].size()>0)
 		{						
 			//找到每组连续扫描到大于(3m/2.5m/2m) 的数据,记录索引
 			std::vector<int> index_vec;
-			std::vector<std::vector<int> > index_vecvec;
+			//std::vector<std::vector<int> > index_vecvec;
+
 			int index_temp((* poselaser_range3_vec[i].begin()).index);
 			
 			for (int jj=0;jj<poselaser_range3_vec[i].size();jj++)
-			//for(auto poselaser:poselaser_range3_vec[i])
 			{
 				if(poselaser_range3_vec[i][jj].index==index_temp)
 					index_vec.push_back( index_temp++ );
 				else 
 				{
 					
-					index_vecvec.push_back(index_vec);
+					index3_vecvecvec[i].push_back(index_vec);
 					index_vec.clear();
 					index_temp=poselaser_range3_vec[i][jj].index;
 					index_vec.push_back( index_temp++ );
@@ -327,44 +331,46 @@ void hi_motionActClient::selfLocalization()
 				
 				if(jj==poselaser_range3_vec[i].size()-1)
 				{
-					index_vecvec.push_back(index_vec);
+					index3_vecvecvec[i].push_back(index_vec);
 					index_vec.clear();					
 				}
 				
 			}
 			//如果首组包含第一次扫描的数据，尾组包含最后一次扫描的数据则这两组为连续（360=0），合并为同一组
-			if( (*index_vecvec.begin())[0]==(*poseLaserDatas_vec_.begin()).index  &&
-			    (*(index_vecvec.end()-1))[0] == (*(poseLaserDatas_vec_.end()-1) ).index     )
+			if( (*index3_vecvecvec[i].begin())[0]==(*poseLaserDatas_vec_.begin()).index  &&
+			    (*(index3_vecvecvec[i].end()-1))[0] == (*(poseLaserDatas_vec_.end()-1) ).index     )
 			{
-				for(auto vec_temp : (*index_vecvec.begin()) )
+				for(auto vec_temp : (*index3_vecvecvec[i].begin()) )
 				{
-					(*(index_vecvec.end()-1)).push_back(vec_temp);
+					(*(index3_vecvecvec[i].end()-1)).push_back(vec_temp);
 				}
 				
-				index_vecvec.erase(index_vecvec.begin());
+				index3_vecvecvec[i].erase(index3_vecvecvec[i].begin());
 			}
 
-			int Maxsize_index(0); //确定含有数据最多的一组
-			int index_vec_Maxsize((*index_vecvec.begin()).size());
-			for (int kk =0;kk <index_vecvec.size();kk++)
-			//for (auto index_vec_temp:index_vecvec)
+			//int Maxsize_index(0); //确定含有数据最多的一组
+
+			//int index_vec_Maxsize((*index3_vecvecvec[i].begin()).size());//这一组有多少个数据
+
+			index_vec3_Maxsize[i] =  (*index3_vecvecvec[i].begin()).size();
+			for (int kk =0;kk <index3_vecvecvec[i].size();kk++)
 			{
-				if(index_vecvec[kk].size() > index_vec_Maxsize)
+				if(index3_vecvecvec[i][kk].size() > index_vec3_Maxsize[i])
 				{
-					index_vec_Maxsize = index_vecvec[kk].size();
-					Maxsize_index = kk;
+					index_vec3_Maxsize[i] = index3_vecvecvec[i][kk].size();
+					Maxsize_index3_vec[i] = kk;
 				}
 					
 			}
 
 			//如果最多的这组数据有一半以上的数据,说明机器人周围有一半以上的方向在3m/2.5m/2m范围内无障碍物
 			//此时控制机器人在合适的方向绕安全半径旋转一周
-			if(index_vec_Maxsize > poseLaserDatas_vec_.size()/2)
+			if(index_vec3_Maxsize[i] > poseLaserDatas_vec_.size()/2)
 			{
 				//有一半方向空旷
 				//找到起始索引,旋转到这个方向然后走个圆形
 				double angle = angleToTarget( (*(poseLaserDatas_vec_.end()-1)).pose_theta,
-								(poseLaserDatas_vec_[index_vecvec[Maxsize_index][0]-1]).pose_theta);
+								(poseLaserDatas_vec_[index3_vecvecvec[i][Maxsize_index3_vec[i]][0]-1]).pose_theta);
 				if (fabs(angle)>0)
 				{
 					std::cout << "next(half): rotate " <<angle*180/M_PI <<" with radius 0 and ";
@@ -384,23 +390,32 @@ void hi_motionActClient::selfLocalization()
 				std::cout << "next(half): rotate 360 with radius " <<radius_temp <<std::endl;
 				goalSend(0.9,360.0*M_PI/180.0,0);  //按合适半径走圆形
 				while(!actionServe_enable_);//等待该任务执行完
-				
-				break;
-				
+
+				moved_flag =true;
+				break;				
 			}
+		}
+	}
+
+	if(moved_flag) return; 
+
+	for(int i=0;i<3;i++)
+	{
+		if(poselaser_range3_vec[i].size()>0)
+		{			
 			//机器人周围只有某些方向在3m/2.5m/2m范围内无障碍物,则朝无障碍物方向前进1m
-			else if (index_vec_Maxsize >= 3)
+			if (index_vec3_Maxsize[i] >= 3)
 			{
 				//找到中间索引,旋转到这个方向然后朝这个方向直行一米
 				int index_temp3();
 				
 				//double angle_current ((*(poseLaserDatas_vec_.end()-1)).pose_theta);
-				//double angle_target  ((poseLaserDatas_vec_[index_vecvec[Maxsize_index][index_vec_Maxsize/2]-1]).pose_theta);
+				//double angle_target  ((poseLaserDatas_vec_[index3_vecvecvec[i][Maxsize_index3_vec[i]][index_vec3_Maxsize[i]/2]-1]).pose_theta);
 				
 				//double angle = angleToTarget(angle_current,angle_target);
 				
 				double angle = angleToTarget( (*(poseLaserDatas_vec_.end()-1)).pose_theta,
-								(poseLaserDatas_vec_[index_vecvec[Maxsize_index][index_vec_Maxsize/2]-1]).pose_theta);
+								(poseLaserDatas_vec_[index3_vecvecvec[i][Maxsize_index3_vec[i]][index_vec3_Maxsize[i]/2]-1]).pose_theta);
 
 				if (fabs(angle)>0)
 				{
@@ -415,14 +430,16 @@ void hi_motionActClient::selfLocalization()
 				std::cout << "next(once): foward " << 1 <<" m ";
 				goalSend(0,0,1);	//前进一米
 				while(!actionServe_enable_);//等待该任务执行完
-				
-				break;
 
+				moved_flag =true;
+				break;
 			}
 
 		}
 	}
 }
+
+
 void hi_motionActClient::explore()
 {
 
