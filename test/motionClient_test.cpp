@@ -1,5 +1,6 @@
 #include <ros/ros.h>
 #include <std_msgs/Float32.h>
+#include "std_msgs/String.h"
 #include <sensor_msgs/LaserScan.h>
 #include <actionlib/client/simple_action_client.h>
 #include <localization_ros/hi_motionAction.h>
@@ -10,6 +11,8 @@
 #include <vector>
 
 #include <fstream>
+
+#include <signal.h>
 /*
 #goal definition
 float32 rotate_radius
@@ -36,6 +39,7 @@ class hi_motionActClient
 
 	ros::NodeHandle nh_;
 	ros::Subscriber laser_scan_sub_;
+	ros::Subscriber localizationState_sub_;
 	
 	const  double FORWARD_SPEED_MPS = 0.2;
     const  double MIN_SCAN_ANGLE_RAD = -5.0/180*M_PI;
@@ -43,6 +47,9 @@ class hi_motionActClient
     const  float MIN_PROXIMITY_RANGE_M = 0.6;
 
 	int collision_warning_count_;
+
+
+
 
   public:
   	bool goalSended_flag_ ;
@@ -69,6 +76,13 @@ class hi_motionActClient
 	bool pose_laser_init_;
 	std::vector<PoseLaserData> poseLaserDatas_vec_;
 
+	//定位状态相关
+	enum LocateState 
+	{
+		UNKNOW,FIND,LOST
+	};
+	LocateState  localization_state_;
+
 	////
 
 	hi_motionActClient(std::string name);
@@ -78,6 +92,8 @@ class hi_motionActClient
 
 	void selfLocalization();
 	void explore();
+
+	void state_callback(const std_msgs::String::ConstPtr& msg);
 
 	void doneCb(const actionlib::SimpleClientGoalState& state,
 		        const hi_motionResultConstPtr& result )
@@ -102,7 +118,7 @@ class hi_motionActClient
 	{
 	    //ROS_INFO("Got Feedback  %f", feedback->range);
 	    //ROS_INFO("Got Feedback  %f", feedback->angle);
-		ROS_INFO("Got Feedback  %s",feedback->state_motion.c_str());
+		ROS_INFO("Got Feedback  %s",feedback->motion_state.c_str());
 	}
 	
 	
@@ -114,7 +130,8 @@ hi_motionActClient::hi_motionActClient(std::string name) :ac_(name, true),
 														  tf_base_enable_(false),
 														  goalSended_flag_ (false),
 														  pose_laser_init_(false),
-														  actionServe_enable_(true)
+														  actionServe_enable_(true),
+														  localization_state_(UNKNOW)
 {
 	ROS_INFO("Waiting for action server to start.");
 	ac_.waitForServer();
@@ -144,7 +161,8 @@ hi_motionActClient::hi_motionActClient(std::string name) :ac_(name, true),
 	}
 
 	laser_scan_sub_ = nh_.subscribe("/scan",1,&hi_motionActClient::laserScanCallback,this); 
-
+	localizationState_sub_=nh_.subscribe("localization_state", 1, 
+									&hi_motionActClient::state_callback,this);
 }
 
 bool hi_motionActClient::goalSend(float radius,float angle,float dist)
@@ -249,7 +267,11 @@ void hi_motionActClient::selfLocalization()
 {
 	//首先原地转一圈
 	goalSend(0,360.0*M_PI/180.0,0);
-	while(!actionServe_enable_);//等待该任务执行完
+	while(!actionServe_enable_)//等待该任务执行完
+	{
+		if(localization_state_==FIND) return;
+	}
+
 
 
 	//统计分析周围环境数据
@@ -292,9 +314,16 @@ void hi_motionActClient::selfLocalization()
 			std::cout << "next(all clear): rotate 360 with radius " <<radius_temp <<std::endl;
 
 			goalSend(radius_temp,360.0*M_PI/180.0,0);
-			while(!actionServe_enable_);//等待该任务执行完
+			while(!actionServe_enable_)//等待该任务执行完
+			{
+				if(localization_state_==FIND) return;
+			}
+			
 			goalSend(radius_temp,-360.0*M_PI/180.0,0);
-			while(!actionServe_enable_);//等待该任务执行完
+			while(!actionServe_enable_)//等待该任务执行完
+			{
+				if(localization_state_==FIND) return;
+			}
 
 			moved_flag =true;
 			break;
@@ -374,7 +403,10 @@ void hi_motionActClient::selfLocalization()
 				{
 					std::cout << "next(half): rotate " <<angle*180/M_PI <<" with radius 0 and ";
 					goalSend(0,angle,0);   //先旋转到合适方向
-					while(!actionServe_enable_);//等待该任务执行完
+					while(!actionServe_enable_)//等待该任务执行完
+					{
+						if(localization_state_==FIND) return;
+					}
 					
 				}
 
@@ -388,7 +420,10 @@ void hi_motionActClient::selfLocalization()
 
 				std::cout << "next(half): rotate 360 with radius " <<radius_temp <<std::endl;
 				goalSend(0.9,360.0*M_PI/180.0,0);  //按合适半径走圆形
-				while(!actionServe_enable_);//等待该任务执行完
+				while(!actionServe_enable_)//等待该任务执行完
+				{
+					if(localization_state_==FIND) return;
+				}
 
 				moved_flag =true;
 				break;				
@@ -406,7 +441,7 @@ void hi_motionActClient::selfLocalization()
 			if (index_vec3_Maxsize[i] >= 3)
 			{
 				//找到中间索引,旋转到这个方向然后朝这个方向直行一米
-				int index_temp3();
+				//int index_temp3();
 				
 				//double angle_current ((*(poseLaserDatas_vec_.end()-1)).pose_theta);
 				//double angle_target  ((poseLaserDatas_vec_[index3_vecvecvec[i][Maxsize_index3_vec[i]][index_vec3_Maxsize[i]/2]-1]).pose_theta);
@@ -422,7 +457,10 @@ void hi_motionActClient::selfLocalization()
 
 					std::cout << "next(once): rotate " <<angle *180/M_PI <<" with radius 0 and ";	
 					goalSend(0,angle,0);   //先旋转到合适方向
-					while(!actionServe_enable_);//等待该任务执行完
+					while(!actionServe_enable_)//等待该任务执行完
+					{
+						if(localization_state_==FIND) return;
+					}
 				    
 				}
 
@@ -437,7 +475,10 @@ void hi_motionActClient::selfLocalization()
 				*/
 				std::cout << "next(once): foward " << 1 <<" m ";
 				goalSend(0,0,foward_distance);	//前进一米
-				while(!actionServe_enable_);//等待该任务执行完
+				while(!actionServe_enable_)//等待该任务执行完
+				{
+					if(localization_state_==FIND) return;
+				}
 
 				moved_flag =true;
 				break;
@@ -447,14 +488,42 @@ void hi_motionActClient::selfLocalization()
 	}
 }
 
+void hi_motionActClient::state_callback(const std_msgs::String::ConstPtr& msg)
+{
+	std::cout << "state_callback:" << std::endl;
+	std_msgs::String state_temp;
+	std::stringstream ss;
+	ss << "FIND " << std::endl;
+	state_temp.data = ss.str();
+	if(msg->data == state_temp.data)
+	{
+		localization_state_=FIND;
+		std::cout << "localization succeed !" << std::endl;
+		if(goalSended_flag_) ac_.cancelGoal();
+		ros::shutdown();
+	}
+	else
+	{
+		localization_state_=LOST;
+	}
+}
 
 void hi_motionActClient::explore()
 {
 
 }
+
+
+void sighandler(int signum)
+{
+	ros::shutdown();
+	printf("Catch a signal num is %d ...\n", signum);
+	exit(1);
+}
 void spinThread()
 {
   ros::spin();
+  signal(SIGINT, sighandler);
 }
 int main (int argc, char **argv)
 {
@@ -463,10 +532,19 @@ int main (int argc, char **argv)
 
 	boost::thread spin_thread(&spinThread);
 
+	std::cout << "wait for localization state messege ..." << std::endl;
+	while(hi_motionAC.localization_state_==hi_motionActClient::UNKNOW);//等待定位状态消息
+	
+	if(hi_motionAC.localization_state_==hi_motionActClient::FIND) return 0;
+	
 	for (int i=0;i<10;i++)
+	{
 		hi_motionAC.selfLocalization();
+		if(hi_motionAC.localization_state_==hi_motionActClient::FIND) return 0;
+	}
+		
 
-
+	ros::shutdown();
 /*
 	std::ofstream fout("./pose_laser3.txt");
 	for (auto poselaser: hi_motionAC.poseLaserDatas_vec_)

@@ -4,10 +4,8 @@ float32 rotate_angle
 float32 foward_dist
 ---
 #result definition
-float32[] ranges
-float32[] angles
+string result_state
 ---
 #feedback
-string state_motion
-float32 range
-float32 angle
+string motion_state
+

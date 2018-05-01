@@ -37,7 +37,24 @@
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 
 #include "std_msgs/String.h"
-
+//the following are UBUNTU/LINUX ONLY terminal color
+#define RESET "\033[0m"
+#define BLACK "\033[30m" /* Black */
+#define RED "\033[31m" /* Red */
+#define GREEN "\033[32m" /* Green */
+#define YELLOW "\033[33m" /* Yellow */
+#define BLUE "\033[34m" /* Blue */
+#define MAGENTA "\033[35m" /* Magenta */
+#define CYAN "\033[36m" /* Cyan */
+#define WHITE "\033[37m" /* White */
+#define BOLDBLACK "\033[1m\033[30m" /* Bold Black */
+#define BOLDRED "\033[1m\033[31m" /* Bold Red */
+#define BOLDGREEN "\033[1m\033[32m" /* Bold Green */
+#define BOLDYELLOW "\033[1m\033[33m" /* Bold Yellow */
+#define BOLDBLUE "\033[1m\033[34m" /* Bold Blue */
+#define BOLDMAGENTA "\033[1m\033[35m" /* Bold Magenta */
+#define BOLDCYAN "\033[1m\033[36m" /* Bold Cyan */
+#define BOLDWHITE "\033[1m\033[37m" /* Bold White */
 class PoseResult   //表示相机位姿
 {
 	public:
@@ -49,15 +66,20 @@ class PoseResult   //表示相机位姿
 
 int main(int argc, char** argv) 
 {
+    string parameter_file_dir;
+    
     if ( argc != 2 )
     {
-        cout<<"usage: parameter_file!"<<endl;
-        return 1;
+        cout<<"use default parameter_file!"<<endl;
+        parameter_file_dir ="/home/robot/hi_robot/src/localization_ros/config/default.yaml";
+        //return 1;
     }
+    else
+    	parameter_file_dir =argv[1];
     
 /***初始化***/
 	cout<<"initializing... "<<endl;
-    localization::Config::setParameterFile ( argv[1] );
+    localization::Config::setParameterFile ( parameter_file_dir );
         
     string map_dir = localization::Config::get<string> ( "map_dir" );
     //string image_query_dir = localization::Config::get<string> ( "image_query_dir" );
@@ -178,6 +200,7 @@ int main(int argc, char** argv)
 		    	{
 		    		continue;
 		    	}
+		    	
 				fout << "result " << k << ":   " 
 					 << "frame_id: " << pose_result_vec[k].frame_id << "   "
 					 << " score: "  << pose_result_vec[k].score << "   "
@@ -190,24 +213,66 @@ int main(int argc, char** argv)
 		/**********************/	
 	
 			//对求得的结果作加权平均，分数占0.8，内点0.2
-			int num_good_pose(0);
+			
 			double pose_x(0), pose_y(0),pose_theta(0);
-			double pose_score_total(0), pose_inliers_total(0);		
+			//double pose_score_total(0), pose_inliers_total(0);	
+			vector<PoseResult>good_pose_vec;
+				
 			for(int k=0; k<num_result; k++)
 			{
 				if(pose_result_vec[k].state)
 				{
-					num_good_pose++;
-					pose_score_total += pose_result_vec[k].score;
-					pose_inliers_total += pose_result_vec[k].num_inliers;
+					//num_good_pose++;
+					good_pose_vec.push_back(pose_result_vec[k]);
+					
+					//pose_score_total += pose_result_vec[k].score;
+					//pose_inliers_total += pose_result_vec[k].num_inliers;
 				}	
 			}
-						
-			if(num_good_pose !=0)
+			
+			int num_good_pose(good_pose_vec.size());
+			//选出距离最近的两个结果,数据量不多暂且这样筛选数据
+			int index_1(0),index_2(1);
+			double min_dist(100.0);			
+			if(num_good_pose >=2)
 			{
+				struct dist_ 
+			    {
+					double operator () (const PoseResult &res1,const PoseResult &res2) 
+					{
+					    return sqrt( pow(res1.x-res2.x, 2)+pow(res1.y-res2.y, 2) );
+					}       
+			    } dist;
+			    
+				if(num_good_pose =2)
+					min_dist=dist(good_pose_vec[index_1], good_pose_vec[index_2]);
+					
+				else 
+				{	    		    
+				    for(int i=0;i<num_good_pose;i++)
+				    for(int j=i+1;j<num_good_pose;j++)
+				    {
+				    	double d_t = dist(good_pose_vec[i], good_pose_vec[j]);
+				    	if(d_t < min_dist)
+				    	{
+				    		min_dist=d_t; //距离最近的两个结果之间的距离
+				    		index_1=i;
+				    		index_2=j;
+				    	}
+				    }
+				}
+			}
+			if(min_dist < 0.8)
+			{
+				pose_x=0.5*(good_pose_vec[index_1].x + good_pose_vec[index_2].x);
+				pose_y=0.5*(good_pose_vec[index_1].y + good_pose_vec[index_2].y);
+				pose_theta=0.5*(good_pose_vec[index_1].theta + good_pose_vec[index_2].theta);
+				
+				
+				/*
 				for(int k=0; k<num_result; k++)
 				{
-					if(pose_result_vec[k].state)
+					if(pose_result_vec[k].state)//改掉，不做加权，而是选
 					{					
 						double pose_weight(0);
 						pose_weight =( (0.8*pose_result_vec[k].score   /pose_score_total)  + 
@@ -217,7 +282,7 @@ int main(int argc, char** argv)
 						pose_theta +=pose_weight * pose_result_vec[k].theta;
 					}	
 
-				}
+				}*/
 				
 				/*根据计算结果发布初始位姿消息*/
 				geometry_msgs::PoseWithCovarianceStamped pose;
@@ -227,8 +292,8 @@ int main(int argc, char** argv)
 				pose.pose.pose.position.z= 0;					  
 				pose.pose.pose.orientation.x= 0;
 				pose.pose.pose.orientation.y= 0;						  
-				pose.pose.pose.orientation.z= sin(0.5*pose_theta/num_good_pose);
-				pose.pose.pose.orientation.w= cos(0.5*pose_theta/num_good_pose);
+				pose.pose.pose.orientation.z= sin(0.5*(pose_theta-0.5*M_PI));
+				pose.pose.pose.orientation.w= cos(0.5*(pose_theta-0.5*M_PI));
 				pose.pose.covariance={ 0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
 									   0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 
 									   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
@@ -243,16 +308,16 @@ int main(int argc, char** argv)
 				resultState_pub.publish(state_temp);
 				ros::spinOnce();
 				
-				cout<<"good pose :" <<" x:" << pose_x 	
+				cout<<BOLDGREEN"good pose :" <<" x:" << pose_x 	
 									<<"   y:" << pose_y 
 									<<"   theta:" << pose_theta
-									<<endl;
+									<<endl<<endl<<endl;
 									
 										
 				fout<<"good pose :" <<" x:" << pose_x 	
 									<<"   y:" << pose_y 
 									<<"   theta:" << pose_theta
-									<<endl;	
+									<<"   min_dist: "<<min_dist<<endl;	
 				fout << endl << endl <<endl;
 					
 				fout1<<"find "<< pose_x 	
@@ -270,7 +335,7 @@ int main(int argc, char** argv)
 				resultState_pub.publish(state_temp);
 				ros::spinOnce();
 				
-				cout << "not find valid similar frame!" <<endl;
+				cout <<BOLDRED"not find valid similar frame!" <<endl;
 				cout << endl <<endl;	
 				
 				

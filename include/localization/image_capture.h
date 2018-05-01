@@ -14,6 +14,8 @@
 #include <nav_msgs/Odometry.h>
 #include <cmath>
 
+#include <tf/transform_listener.h>
+
 namespace localization 
 {
 #define Pi 3.1415926 
@@ -23,36 +25,48 @@ using namespace message_filters;
 class Capturer
 {
 	private:
-	  ros::NodeHandle nh;
-	  
-	  ros::Subscriber odom_sub;
-	  float odom_vx, odom_vy, odom_vth;
-	  float x, y , th, dd;
-	  ros::Time last_time;
-	  
-	  image_transport::ImageTransport it;
-	  typedef image_transport::SubscriberFilter ImageSubscriber;
-	  ImageSubscriber rgb_sub;
-	  ImageSubscriber depth_sub;
+		ros::NodeHandle nh;
 
-	  typedef sync_policies::ApproximateTime<Image, Image> MySyncPolicy;
-	  Synchronizer< MySyncPolicy > sync;
+		/*
+		ros::Subscriber odom_sub;
+		float odom_vx, odom_vy, odom_vth;
+		float x, y , th, dd;		
+		ros::Time last_time;
+		*/
+		image_transport::ImageTransport it;
+		typedef image_transport::SubscriberFilter ImageSubscriber;
+		ImageSubscriber rgb_sub;
+		ImageSubscriber depth_sub;
+
+		typedef sync_policies::ApproximateTime<Image, Image> MySyncPolicy;
+		Synchronizer< MySyncPolicy > sync;
+
+		float pose_x_, pose_y_, pose_theta_;	  
+		tf::TransformListener listener_;
+		tf::StampedTransform transform_;
+		//bool tf_base_enable_;
+
+		std::string odom_frame_;
+		std::string base_frame_;
+		
+		const float angle_MIN_INC=M_PI * 5.0/180; //最小采集间隔角度
+		const float dist_MIN_INC=0.1;	//最小采集间隔距离
 	  
-	  
+	  	std::ofstream fout_;//记录每张图像的odom信息结果
 	public:
-	  std::string save_dir_;
-	  
-	  int saveCount_;
-	  bool state_;   //是否采集到图像
-	  bool Enable_;	 //是否要采集
-	  cv::Mat color_, depth_;
+		std::string save_dir_;
 
-	  Capturer(std::string save_dir);
-	  void odom_callback(const nav_msgs::Odometry::ConstPtr& odom);
-	  bool captrue_check();
-      void callback(const ImageConstPtr& rgb_image, const ImageConstPtr& depth_image);	    
-      void processImage(const ImageConstPtr& rgb_image, const ImageConstPtr& depth_image);	    
-	  void saveImage(cv_bridge::CvImageConstPtr cv_ptr, std::string imageType);
+		int saveCount_;
+		bool state_;   //是否采集到图像
+		bool Enable_;	 //是否要采集
+		cv::Mat color_, depth_;
+
+		Capturer(std::string save_dir);
+		void odom_callback(const nav_msgs::Odometry::ConstPtr& odom);
+		bool captrue_check();
+		void callback(const ImageConstPtr& rgb_image, const ImageConstPtr& depth_image);	    
+		void processImage(const ImageConstPtr& rgb_image, const ImageConstPtr& depth_image);	    
+		void saveImage(cv_bridge::CvImageConstPtr cv_ptr, std::string imageType);
 		
 };
 

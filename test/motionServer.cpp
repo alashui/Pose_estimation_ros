@@ -37,9 +37,9 @@ private:
 	ros::Publisher cmdvel_pub_;//发布速度
 	std::string topic_vel_;	 //发布速度的话题
 	  
-	const float linear_speed_ = 0.2;//linear speed : 0.2m/s	
-	const float angular_speed_ = 0.3;//rotation speed : 0.5 rad/s
-	const float MAX_linear_speed_ =0.5;
+	const float linear_speed_ = 0.18;//linear speed : 0.2m/s	
+	const float angular_speed_ = 0.2;//rotation speed : 0.2 rad/s
+	const float MAX_linear_speed_ =0.3;
 		
 	const double angular_tolerance_ = 2.5*M_PI/180; //角度误差容忍
 
@@ -51,7 +51,8 @@ public:
 	action_name_(name)
 	{
 		as_.registerPreemptCallback(boost::bind(&hi_motionActServ::preemptCB, this));
-		topic_vel_ = "/mobile_base/commands/velocity";
+		//topic_vel_ = "/mobile_base/commands/velocity";
+		topic_vel_ = "/cmd_vel_mux/input/teleop";
 		cmdvel_pub_ = nh_.advertise<geometry_msgs::Twist>(topic_vel_, 1);
 	}
 
@@ -128,6 +129,8 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 			speed.angular.z -= 0.01;
 			speed.linear.x = goal->rotate_radius*speed.angular.z;
 		}
+		
+		
 		ROS_INFO("rotation...!"); 
 		listener.lookupTransform(odom_frame, base_frame, ros::Time(0), transform);   
 		double last_angle = fabs(tf::getYaw(transform.getRotation()));//Track the last angle measured   
@@ -135,7 +138,8 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 		while( (fabs(turn_angle + angular_tolerance_) < fabs(goal->rotate_angle) ) && (ros::ok()) )
 		{
 			if(!as_.isActive())break;//判断任务是否还要执行
-
+			if (as_.isPreemptRequested() || !ros::ok())break;// 判断任务有没被取消或抢占
+			
 			cmdvel_pub_.publish(speed);
 			loopRate.sleep();
 			// Get the current rotation
@@ -156,7 +160,7 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 	//直走过程
 	if(goal->foward_dist > 0)  //直行距离必须大于零,不能后退
 	{
-		speed.linear.x=linear_speed_ ;
+		speed.linear.x=0 ;
 		speed.angular.z =0;
 		ROS_INFO("go straight...!");
 
@@ -167,7 +171,15 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 		float distance = 0;
 		while( (distance < goal->foward_dist) && (ros::ok()) )
 		{
-			if(!as_.isActive())break;//判断任务是否还要执行	
+			if(!as_.isActive())break;//判断任务是否还要执行
+			if (as_.isPreemptRequested() || !ros::ok())break;// 判断任务有没被取消或抢占	
+			
+			if(distance < 0.1 * goal->foward_dist)  //避免启动时过大加速度
+			{
+				if(speed.linear.x < linear_speed_)
+					speed.linear.x += 0.01;
+			}											
+		
 			//Publish the Twist message and sleep 1 cycle
 			cmdvel_pub_.publish(speed);
 			loopRate.sleep();
@@ -177,6 +189,21 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 			float y = transform.getOrigin().y();
 			//Compute the Euclidean distance from the start
 			distance = sqrt(pow((x - x_start), 2) +  pow((y - y_start), 2));
+		/*
+			if(distance >  goal->foward_dist - 0.1 )  //避免停止时过大加速度
+			{
+				if(speed.linear.x > 0)
+					speed.linear.x -= 0.02;
+				else
+					speed.linear.x =0.0;
+			}*/
+		}
+		
+		while(speed.linear.x > 0)
+		{
+			speed.linear.x -= 0.01;
+			cmdvel_pub_.publish(speed);
+			ros::Duration(0.02).sleep();
 		}
 		//Stop the robot before the rotation
 		cmdvel_pub_.publish(geometry_msgs::Twist());
