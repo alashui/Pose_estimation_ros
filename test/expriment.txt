@@ -1,0 +1,9 @@
+1.巡线采集图片,并记录odom信息,视觉里程计和轮式历程比较
+2.运行gmapping,巡线跑,记录gmapping输出的位姿
+3.运行Navigation,均匀采样初始化,巡线跑,记录amcl输出的位姿
+4.运行Navigation,视觉词袋定位,巡线跑,记录amcl输出的位姿以及视觉定位输出位姿
+
+1.turtbot miminmal  + follower + captrue_test 
+2.gmapping + follower + tf/transform(odom,base_link)
+3.navigation + follower + 记录 amcl_pose tf/transform(odom,base_link)
+4.navigation + follower + localization_test + 记录amcl_pose /initialize_pose tf/transform(odom,base_link)

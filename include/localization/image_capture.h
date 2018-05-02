@@ -62,6 +62,7 @@ class Capturer
 		cv::Mat color_, depth_;
 
 		Capturer(std::string save_dir);
+		~Capturer();
 		void odom_callback(const nav_msgs::Odometry::ConstPtr& odom);
 		bool captrue_check();
 		void callback(const ImageConstPtr& rgb_image, const ImageConstPtr& depth_image);	    

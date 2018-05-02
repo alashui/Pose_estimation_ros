@@ -123,8 +123,10 @@ int main(int argc, char** argv)
 	
     while( ros::ok() )
     {
-    	ros::spinOnce();               // check for incoming messages
-					
+    	ros::Rate loop_rate(10);  
+		ros::spinOnce();               // check for incoming messages
+		loop_rate.sleep();    
+
 		if(capture.state_)		//图像获取成功,计算相机位姿
 		{
 			capture.state_=false;
@@ -291,9 +293,13 @@ int main(int argc, char** argv)
 				pose.pose.pose.position.y= pose_y;
 				pose.pose.pose.position.z= 0;					  
 				pose.pose.pose.orientation.x= 0;
-				pose.pose.pose.orientation.y= 0;						  
-				pose.pose.pose.orientation.z= sin(0.5*(pose_theta-0.5*M_PI));
-				pose.pose.pose.orientation.w= cos(0.5*(pose_theta-0.5*M_PI));
+				pose.pose.pose.orientation.y= 0;
+
+				geometry_msgs::Quaternion odom_quat_temp = tf::createQuaternionMsgFromYaw(pose_theta);
+				pose.pose.pose.orientation = odom_quat_temp;
+
+				//pose.pose.pose.orientation.z= sin(0.5*(pose_theta-0.5*M_PI));
+				//pose.pose.pose.orientation.w= cos(0.5*(pose_theta-0.5*M_PI));
 				pose.pose.covariance={ 0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
 									   0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 
 									   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 

@@ -42,6 +42,10 @@ Capturer::Capturer(std::string save_dir): saveCount_(0),it(nh),state_(false),
 	sync.registerCallback( boost::bind( &Capturer::callback, this, _1, _2 ) );
 	//odom_sub = nh.subscribe<nav_msgs::Odometry>("/odom",1,&Capturer::odom_callback, this);
 }
+Capturer::~Capturer()
+{
+	fout_.close();
+}
 
 /*
 void Capturer::odom_callback(const nav_msgs::Odometry::ConstPtr& odom)
