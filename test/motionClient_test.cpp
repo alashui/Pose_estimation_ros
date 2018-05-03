@@ -13,20 +13,7 @@
 #include <fstream>
 
 #include <signal.h>
-/*
-#goal definition
-float32 rotate_radius
-float32 rotate_angle
-float32 foward_dist
----
-#result definition
-float32[] ranges
-float32[] angles
----
-#feedback
-float32 range
-float32 angle
-*/
+
 
 using namespace localization_ros;
 typedef actionlib::SimpleActionClient<hi_motionAction> Client;
@@ -213,20 +200,23 @@ void hi_motionActClient::laserScanCallback(const sensor_msgs::LaserScan::ConstPt
 		float closestRange(0);
 		for(int currIndex = minIndex ; currIndex <= maxIndex; currIndex++)
 		{ 
-			if(scan->ranges[currIndex]==scan->ranges[currIndex])//判断是否为nan
+			if(scan->ranges[currIndex]==scan->ranges[currIndex] && scan->ranges[currIndex] > 0.2)//判断是否为nan
 			{
-				closestRange = scan->ranges[currIndex];  //为最近距离赋初值
+				closestRange = scan->ranges[currIndex];  //为最近距离赋初值   //距离小于0.2m的数据视为噪声
+				minIndex = currIndex ;
 				break;
 			}
 		}
-		for (int currIndex = minIndex + 1; currIndex <= maxIndex; currIndex++) 
+		if(closestRange==0)return;//这种情况说明扫描数据无效，抛弃
+		for ( int currIndex = minIndex + 1; currIndex <= maxIndex; currIndex++ ) 
 		{
-			if(scan->ranges[currIndex]==scan->ranges[currIndex])//判断是否为nan
-				if (scan->ranges[currIndex] < closestRange) 
-				{
-					closestRange = scan->ranges[currIndex];
-				}
+			if(   scan->ranges[currIndex]==scan->ranges[currIndex] &&   //判断是否为nan
+				  scan->ranges[currIndex] < closestRange    &&
+				  scan->ranges[currIndex] > 0.2							)				
+			{		closestRange = scan->ranges[currIndex]; }
+				
 		}
+		
 		pose_laser.laser_range = closestRange;
 
 
@@ -266,13 +256,11 @@ double hi_motionActClient::angleToTarget(double theta_current,double theta_targe
 void hi_motionActClient::selfLocalization()
 {
 	//首先原地转一圈
-	goalSend(0,360.0*M_PI/180.0,0);
+	goalSend(0,2.0*M_PI,0);
 	while(!actionServe_enable_)//等待该任务执行完
 	{
-		if(localization_state_==FIND) return;
+		if(localization_state_==FIND) return;		
 	}
-
-
 
 	//统计分析周围环境数据
 	std::vector<std::vector<PoseLaserData> > poselaser_range3_vec(3);
@@ -311,20 +299,40 @@ void hi_motionActClient::selfLocalization()
 				case 2: radius_temp=0.4;break;   //所有扫描距离都大于2m
 			}
 
-			std::cout << "next(all clear): rotate 360 with radius " <<radius_temp <<std::endl;
-
-			goalSend(radius_temp,360.0*M_PI/180.0,0);
+			std::cout << "next(all clear): rotate with radius " <<radius_temp <<std::endl;
+			
+			//运动策略：
+			//以半径在左侧转半周，原地转一周，以半径转半周回起点，以半径右侧转半周，原地一圈，前进一米
+			goalSend(radius_temp,M_PI,0);
 			while(!actionServe_enable_)//等待该任务执行完
 			{
 				if(localization_state_==FIND) return;
 			}
 			
-			goalSend(radius_temp,-360.0*M_PI/180.0,0);
+			goalSend(0,2.0*M_PI,0);
+			while(!actionServe_enable_)//等待该任务执行完
+			{
+				if(localization_state_==FIND) return;		
+			}
+			
+			goalSend(radius_temp,M_PI,0);
+			while(!actionServe_enable_)//等待该任务执行完
+			{
+				if(localization_state_==FIND) return;
+			}
+			
+			goalSend(radius_temp,-1.0*M_PI,0);
 			while(!actionServe_enable_)//等待该任务执行完
 			{
 				if(localization_state_==FIND) return;
 			}
 
+			goalSend(0,2.0*M_PI,1);
+			while(!actionServe_enable_)//等待该任务执行完
+			{
+				if(localization_state_==FIND) return;		
+			}
+						
 			moved_flag =true;
 			break;
 		}
@@ -419,12 +427,13 @@ void hi_motionActClient::selfLocalization()
 				}
 
 				std::cout << "next(half): rotate 360 with radius " <<radius_temp <<std::endl;
-				goalSend(0.9,360.0*M_PI/180.0,0);  //按合适半径走圆形
+				
+				goalSend(radius_temp,1.0*M_PI,0);  //按合适半径走半周
 				while(!actionServe_enable_)//等待该任务执行完
 				{
 					if(localization_state_==FIND) return;
 				}
-
+				
 				moved_flag =true;
 				break;				
 			}
@@ -516,6 +525,7 @@ void hi_motionActClient::explore()
 
 void sighandler(int signum)
 {
+	//if(goalSended_flag_) ac_.cancelGoal();
 	ros::shutdown();
 	printf("Catch a signal num is %d ...\n", signum);
 	exit(1);
@@ -537,10 +547,11 @@ int main (int argc, char **argv)
 	
 	if(hi_motionAC.localization_state_==hi_motionActClient::FIND) return 0;
 	
-	for (int i=0;i<10;i++)
+	for (int i=0;i<4;i++)
 	{
 		hi_motionAC.selfLocalization();
 		if(hi_motionAC.localization_state_==hi_motionActClient::FIND) return 0;
+			
 	}
 		
 

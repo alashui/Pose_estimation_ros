@@ -153,9 +153,17 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 			turn_angle += delta_angle;
 			last_angle = rotation;
 		}
+		
+		while(speed.linear.x > 0)
+		{
+			speed.linear.x -= 0.01;
+			cmdvel_pub_.publish(speed);
+			ros::Duration(0.02).sleep();
+		}
+		
 		//Stop the robot before the rotation
 		cmdvel_pub_.publish(geometry_msgs::Twist());
-		ros::Duration(1).sleep(); // sleep for  a second
+		ros::Duration(0.5).sleep(); // sleep for  a second
 	}
 	//直走过程
 	if(goal->foward_dist > 0)  //直行距离必须大于零,不能后退
@@ -177,7 +185,7 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 			if(distance < 0.1 * goal->foward_dist)  //避免启动时过大加速度
 			{
 				if(speed.linear.x < linear_speed_)
-					speed.linear.x += 0.01;
+					speed.linear.x += 0.02;
 			}											
 		
 			//Publish the Twist message and sleep 1 cycle
@@ -189,14 +197,6 @@ void hi_motionActServ::goalCB(const localization_ros::hi_motionGoalConstPtr &goa
 			float y = transform.getOrigin().y();
 			//Compute the Euclidean distance from the start
 			distance = sqrt(pow((x - x_start), 2) +  pow((y - y_start), 2));
-		/*
-			if(distance >  goal->foward_dist - 0.1 )  //避免停止时过大加速度
-			{
-				if(speed.linear.x > 0)
-					speed.linear.x -= 0.02;
-				else
-					speed.linear.x =0.0;
-			}*/
 		}
 		
 		while(speed.linear.x > 0)

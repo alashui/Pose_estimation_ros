@@ -103,8 +103,8 @@ int main(int argc, char** argv)
 	/*初始化节点,订阅/odom话题中的消息,在话题/initialpose发布位姿估计信息*/
     ros::init( argc, argv, "PoseEstimation" );
     ros::NodeHandle n;    
-	ros::Publisher initial_pose_pub = n.advertise<geometry_msgs::PoseWithCovarianceStamped>("/initialpose", 10);
-	ros::Publisher resultState_pub = n.advertise<std_msgs::String>("/localization_state",10);
+	ros::Publisher initial_pose_pub = n.advertise<geometry_msgs::PoseWithCovarianceStamped>("/initialpose", 2);
+	ros::Publisher resultState_pub = n.advertise<std_msgs::String>("/localization_state",2);
 	
 	
     ROS_INFO("Capturer started...");
@@ -213,8 +213,6 @@ int main(int argc, char** argv)
 					 << "state:"<<pose_result_vec[k].state << endl;
 			}
 		/**********************/	
-	
-			//对求得的结果作加权平均，分数占0.8，内点0.2
 			
 			double pose_x(0), pose_y(0),pose_theta(0);
 			//double pose_score_total(0), pose_inliers_total(0);	
@@ -264,27 +262,12 @@ int main(int argc, char** argv)
 				    }
 				}
 			}
-			if(min_dist < 0.8)
+			if( min_dist < 0.8 )
 			{
 				pose_x=0.5*(good_pose_vec[index_1].x + good_pose_vec[index_2].x);
 				pose_y=0.5*(good_pose_vec[index_1].y + good_pose_vec[index_2].y);
 				pose_theta=0.5*(good_pose_vec[index_1].theta + good_pose_vec[index_2].theta);
 				
-				
-				/*
-				for(int k=0; k<num_result; k++)
-				{
-					if(pose_result_vec[k].state)//改掉，不做加权，而是选
-					{					
-						double pose_weight(0);
-						pose_weight =( (0.8*pose_result_vec[k].score   /pose_score_total)  + 
-								       (0.2*pose_result_vec[k].num_inliers /pose_inliers_total)  );
-						pose_x +=pose_weight * pose_result_vec[k].x; 							  
-						pose_y +=pose_weight * pose_result_vec[k].y;
-						pose_theta +=pose_weight * pose_result_vec[k].theta;
-					}	
-
-				}*/
 				
 				/*根据计算结果发布初始位姿消息*/
 				geometry_msgs::PoseWithCovarianceStamped pose;
@@ -292,20 +275,20 @@ int main(int argc, char** argv)
 				pose.pose.pose.position.x= pose_x;
 				pose.pose.pose.position.y= pose_y;
 				pose.pose.pose.position.z= 0;					  
-				pose.pose.pose.orientation.x= 0;
-				pose.pose.pose.orientation.y= 0;
+				//pose.pose.pose.orientation.x= 0;
+				//pose.pose.pose.orientation.y= 0;
 
-				geometry_msgs::Quaternion odom_quat_temp = tf::createQuaternionMsgFromYaw(pose_theta);
-				pose.pose.pose.orientation = odom_quat_temp;
+				geometry_msgs::Quaternion odom_quat_temp = tf::createQuaternionMsgFromYaw(pose_theta + 0.5*M_PI);
+				pose.pose.pose.orientation = odom_quat_temp;			//map的原点坐标系和相机的原点坐标系相差90度
 
-				//pose.pose.pose.orientation.z= sin(0.5*(pose_theta-0.5*M_PI));
-				//pose.pose.pose.orientation.w= cos(0.5*(pose_theta-0.5*M_PI));
-				pose.pose.covariance={ 0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
-									   0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 
-									   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
-									   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
-									   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
-									   0.0, 0.0, 0.0, 0.0, 0.0, 0.068 };
+				//pose.pose.pose.orientation.z= sin(0.5*pose_theta);
+				//pose.pose.pose.orientation.w= cos(0.5*pose_theta);
+				pose.pose.covariance = {   0.25, 0.0, 0.0, 0.0, 0.0, 0.0,
+										   0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 
+										   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
+										   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
+										   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
+										   0.0, 0.0, 0.0, 0.0, 0.0, 0.068    };
 				initial_pose_pub.publish(pose);
 				std_msgs::String state_temp;
 				std::stringstream ss;

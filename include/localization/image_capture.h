@@ -27,12 +27,6 @@ class Capturer
 	private:
 		ros::NodeHandle nh;
 
-		/*
-		ros::Subscriber odom_sub;
-		float odom_vx, odom_vy, odom_vth;
-		float x, y , th, dd;		
-		ros::Time last_time;
-		*/
 		image_transport::ImageTransport it;
 		typedef image_transport::SubscriberFilter ImageSubscriber;
 		ImageSubscriber rgb_sub;
@@ -44,15 +38,14 @@ class Capturer
 		float pose_x_, pose_y_, pose_theta_;	  
 		tf::TransformListener listener_;
 		tf::StampedTransform transform_;
-		//bool tf_base_enable_;
 
-		std::string odom_frame_;
+		std::string map_frame_;
 		std::string base_frame_;
 		
 		const float angle_MIN_INC=M_PI * 5.0/180; //最小采集间隔角度
 		const float dist_MIN_INC=0.1;	//最小采集间隔距离
 	  
-	  	std::ofstream fout_;//记录每张图像的odom信息结果
+	  	std::ofstream fout_;//记录每张图像的pose信息结果
 	public:
 		std::string save_dir_;
 
@@ -63,7 +56,7 @@ class Capturer
 
 		Capturer(std::string save_dir);
 		~Capturer();
-		void odom_callback(const nav_msgs::Odometry::ConstPtr& odom);
+
 		bool captrue_check();
 		void callback(const ImageConstPtr& rgb_image, const ImageConstPtr& depth_image);	    
 		void processImage(const ImageConstPtr& rgb_image, const ImageConstPtr& depth_image);	    
