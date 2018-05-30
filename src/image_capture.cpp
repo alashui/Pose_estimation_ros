@@ -11,6 +11,7 @@ Capturer::Capturer(std::string save_dir): saveCount_(0),it(nh),state_(false),
 										  depth_sub( it, "/camera/depth/image_raw", 1 ),
 										  sync( MySyncPolicy( 10 ), rgb_sub, depth_sub ),
 										  map_frame_("/map"),
+										  odom_frame_("/odom"),
 										  fout_(save_dir+"/image_pose_map.txt") 
 {
 
@@ -45,11 +46,15 @@ Capturer::~Capturer()
 bool Capturer::captrue_check() //根据里程信息决定是否可以采集图像
 {
 
-	listener_.lookupTransform(map_frame_, base_frame_, ros::Time(0), transform_);
+	listener_.lookupTransform(odom_frame_, base_frame_, ros::Time(0), transform_);
 	float pose_x_now = transform_.getOrigin().x();
 	float pose_y_now = transform_.getOrigin().y();
 	float pose_theta_now = tf::getYaw(transform_.getRotation());
 	
+	listener_.lookupTransform(map_frame_, base_frame_, ros::Time(0), transform_);
+	pose_x_map_ = transform_.getOrigin().x();
+	pose_y_map_ = transform_.getOrigin().y();
+	pose_theta_map_ = tf::getYaw(transform_.getRotation());
 	//运动过一定距离才采集一次
 	bool flag_temp(false);
 	if(	(fabs ( pose_theta_now - pose_theta_ ) >= angle_MIN_INC ) ||
@@ -76,12 +81,16 @@ void Capturer::callback(const ImageConstPtr& rgb_image, const ImageConstPtr& dep
 		    saveCount_ ++;
 		    
 		    //记录位姿
-		    listener_.lookupTransform(map_frame_, base_frame_, ros::Time(0), transform_);
+		    listener_.lookupTransform(odom_frame_, base_frame_, ros::Time(0), transform_);
 			pose_x_ = transform_.getOrigin().x();
 			pose_y_ = transform_.getOrigin().y();
 			pose_theta_ = tf::getYaw(transform_.getRotation());
 			
-			
+			listener_.lookupTransform(map_frame_, base_frame_, ros::Time(0), transform_);
+			pose_x_map_ = transform_.getOrigin().x();
+			pose_y_map_ = transform_.getOrigin().y();
+			pose_theta_map_ = tf::getYaw(transform_.getRotation());
+
 		    processImage(rgb_image, depth_image);
 		    state_ = true;
 		}
@@ -134,7 +143,7 @@ void Capturer::processImage(const ImageConstPtr& rgb_image, const ImageConstPtr&
    		return;
  	}
  	
- 	fout_ << saveCount_ <<" "<< pose_x_ <<" "<<pose_y_ <<" "<<pose_theta_<<std::endl;//保存每张图像的pose信息
+ 	fout_ << saveCount_ <<" "<< pose_x_map_ <<" "<<pose_y_map_ <<" "<<pose_theta_map_<<std::endl;//保存每张图像的pose信息
  			 				
 	saveCount_ ++;
 	

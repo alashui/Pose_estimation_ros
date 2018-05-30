@@ -22,7 +22,7 @@ namespace localization
     	}
 		//读取需要添加进数据库的图像,提取特征并计算描述子
 
-		//直接从已生成的Map实例中获取
+		//直接从已生成的Map（关键帧序列）实例中获取
 				
 	   	//生成数据库
 		//DBoW3::Database db( vocab, true, 0);

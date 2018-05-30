@@ -35,11 +35,13 @@ class Capturer
 		typedef sync_policies::ApproximateTime<Image, Image> MySyncPolicy;
 		Synchronizer< MySyncPolicy > sync;
 
-		float pose_x_, pose_y_, pose_theta_;	  
+		float pose_x_, pose_y_, pose_theta_;//odom坐标系下位姿
+		float pose_x_map_, pose_y_map_, pose_theta_map_;//地图坐标系下位姿	  
 		tf::TransformListener listener_;
 		tf::StampedTransform transform_;
 
 		std::string map_frame_;
+		std::string odom_frame_;
 		std::string base_frame_;
 		
 		const float angle_MIN_INC=M_PI * 5.0/180; //最小采集间隔角度

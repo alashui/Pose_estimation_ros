@@ -5,5 +5,7 @@
 
 1.turtbot miminmal + freenect + follower_savePoseImg_odom  
 2.turtbot miminmal + gmapping + follower_savePoseImg_map
+
+
 3.turtbot miminmal + navigation + follower_savePoseImg_map 
 4.turtbot miminmal +navigation + follower_drive + localization_test  (记录amcl_pose /initialize_pose tf/transform(map,base_link) ）

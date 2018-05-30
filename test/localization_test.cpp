@@ -81,7 +81,7 @@ int main(int argc, char** argv)
 	cout<<"initializing... "<<endl;
     localization::Config::setParameterFile ( parameter_file_dir );
         
-    string map_dir = localization::Config::get<string> ( "map_dir" );
+    //string map_dir = localization::Config::get<string> ( "map_dir" );
     //string image_query_dir = localization::Config::get<string> ( "image_query_dir" );
     string capture_save_dir_ = localization::Config::get<string> ( "capture_save_dir" );
     string dir_result_detailed_out(capture_save_dir_+"/result_detailed.txt");
@@ -234,7 +234,7 @@ int main(int argc, char** argv)
 			//选出距离最近的两个结果,数据量不多暂且这样筛选数据
 			int index_1(0),index_2(1);
 			double min_dist(100.0);			
-			if(num_good_pose >=2)
+			if(num_good_pose >=3)
 			{
 				struct dist_ 
 			    {

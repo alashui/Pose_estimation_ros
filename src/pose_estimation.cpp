@@ -260,10 +260,10 @@ double PoseEstimation::getViewAngle ( Frame::Ptr frame, MapPoint::Ptr point )
     return acos( n.transpose()*point->norm_ );
 }
 
+/*
 void PoseEstimation::mapInitialization()  //根据pose.txt文件生成一个Map实例
 {
-    //string map_dir = localization::Config::get<string> ( "map_dir" );
-	//map_->load(map_dir);
+
 	cout<<"initializing map "<<endl;
 	if(map_->state_==Map::EMPTY)
 	{
@@ -271,7 +271,7 @@ void PoseEstimation::mapInitialization()  //根据pose.txt文件生成一个Map�
 		string dir_pose(image_database_dir +  "/pose.txt");				
 
 	    ifstream fin(dir_pose);	    	//数据格式:frame_id              double[12]
-	    								//		(数字1,2,3,...)对应帧id ;	R(3x3) t(3x1) 表示该帧的相机位姿     
+	    								//(数字1,2,3,...)对应帧id ;	R(3x3) t(3x1) 表示该帧的相机位姿     
 		if (!fin)								
 		{
 		    cerr<<"cannot find pose file"<<endl;
@@ -314,33 +314,74 @@ void PoseEstimation::mapInitialization()  //根据pose.txt文件生成一个Map�
 				//frame_ptr_vec.push_back(frame);
 				map_->insertKeyFrame ( frame );																
 		   }
-		   
-		/*
-		   Frame::Ptr frame_cur,frame_ref;
-		   for (Frame::Ptr frame : frame_ptr_vec)
-		   {
-
-		   		if(map_->state_==Map::EMPTY)
-		   		{
-		   			map_->addKeyFrame(frame);	//第一帧,添加所有关键点为地图点(函数addKeyFrame有处理)
-		   			map_->state_=Map::EXIST;
-		   			frame_cur=frame_ref=frame;
-		   		}
-		   		else
-		   		{		   	
-					frame_cur=frame;
-		   			featureMatching(frame_cur, frame_ref);
-
-		   			map_->addKeyFrame(frame);
-		   			map_->addMapPoints( frame,match_2dkp_index_);
-		   		}
-		   		
-		   }*/		   
 		}           	
 	}
 	cout<<"map initialization completed."<<endl;	
 }
+*/
 
+//通过result_after.g2o文件生成pose.txt文件
+void PoseEstimation::mapInitialization()  //根据result_after.g2o文件生成一个Map实例(关键帧序列及其对应位姿)
+{
+
+	cout<<"initializing map "<<endl;
+	if(map_->state_==Map::EMPTY)
+	{
+		string image_database_dir = Config::get<string> ( "image_database_dir" );
+		string dir_result_after_g2o(image_database_dir + "/result_after.g2o");
+
+		ifstream fin(dir_result_after_g2o);	 
+		if (!fin)								
+		{
+			cerr<<"cannot find result_after.g2o file"<<endl;
+				//return 1;
+		}
+		else//文件存在
+		{
+
+			string temp;	
+			int num_line=0;
+			while(getline(fin,temp))		//获取一行,一行数据格式为  VERTEX_SE3:QUAT 1   0 0 0 0 0 0 1  
+												//八位数字分别表示 x y z qx qy qz qw(前三位为位置，后四位为四元数表示的旋转角)
+			{	
+				//对每一行数据的读入
+				num_line++;
+				if (num_line==2)	//忽略第二行 数据为 FIX 1
+					continue;
+				string temp_str;  //忽略每行前面的字符串 VERTEX_SE3:QUAT
+				vector<double> double_vec; 
+				double num;
+				istringstream iss(temp);
+				iss >> temp_str;
+				if (temp_str!="VERTEX_SE3:QUAT") break;  	
+					
+				while(iss >> num)  		//分别将这一行数据读入						
+					double_vec.push_back(num);
+					
+				Frame::Ptr frame(new Frame());
+				frame->id_=double_vec[0];
+				string rgb_dir = image_database_dir+"/rgb/rgb"+to_string(frame->id_)+".png";
+				string depth_dir = image_database_dir+"/depth/depth"+to_string(frame->id_)+".png";     
+				frame->color_ = imread(rgb_dir);
+	       		frame->depth_ = imread(depth_dir);
+
+  				cout<<"frame"<<frame->id_<<endl;
+				frame->extractKeyPoints();
+				frame->computeDescriptors();
+			
+					//将x y z q1 q2 q3 q4 转换为sophus::se3 表示
+				Eigen::Vector3d t(double_vec[1],double_vec[2],double_vec[3]);
+				Eigen::Quaterniond q(double_vec[7],double_vec[4],double_vec[5],double_vec[6]);
+												//Eigen::Quaterniond里使用顺序qw qx qy qz 
+				Sophus::SE3 T(q,t);
+				frame->T_c_w_ = T.inverse();				
+
+				map_->insertKeyFrame ( frame );	
+   			}
+		} 
+	}
+	cout<<"map initialization completed."<<endl;	
+}
 
 
 }

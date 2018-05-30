@@ -31,7 +31,7 @@ class hi_motionActClient
 	const  double FORWARD_SPEED_MPS = 0.2;
     const  double MIN_SCAN_ANGLE_RAD = -5.0/180*M_PI;
     const  double MAX_SCAN_ANGLE_RAD = +5.0/180*M_PI;
-    const  float MIN_PROXIMITY_RANGE_M = 0.6;
+    const  float MIN_PROXIMITY_RANGE_M = 0.5;
 
 	int collision_warning_count_;
 
@@ -294,9 +294,9 @@ void hi_motionActClient::selfLocalization()
 			float radius_temp(0);
 			switch(i)
 			{
-				case 0: radius_temp=0.9;break;   //所有扫描距离都大于3m
-				case 1: radius_temp=0.65;break;  //所有扫描距离都大于2.5m
-				case 2: radius_temp=0.4;break;   //所有扫描距离都大于2m
+				case 0: radius_temp=1.0;break;   //所有扫描距离都大于3m
+				case 1: radius_temp=0.75;break;  //所有扫描距离都大于2.5m
+				case 2: radius_temp=0.5;break;   //所有扫描距离都大于2m
 			}
 
 			std::cout << "next(all clear): rotate with radius " <<radius_temp <<std::endl;
@@ -421,9 +421,9 @@ void hi_motionActClient::selfLocalization()
 				float radius_temp(0);
 				switch(i)
 				{
-					case 0: radius_temp=0.9;break;   //所有扫描距离都大于3m
-					case 1: radius_temp=0.65;break;  //所有扫描距离都大于2.5m
-					case 2: radius_temp=0.4;break;   //所有扫描距离都大于2m
+					case 0: radius_temp=1.0;break;   //所有扫描距离都大于3m
+					case 1: radius_temp=0.75;break;  //所有扫描距离都大于2.5m
+					case 2: radius_temp=0.5;break;   //所有扫描距离都大于2m
 				}
 
 				std::cout << "next(half): rotate 360 with radius " <<radius_temp <<std::endl;
