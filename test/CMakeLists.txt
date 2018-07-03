@@ -13,7 +13,8 @@ target_link_libraries( localization_test localization  ${DBoW3_LIBS} ${catkin_LI
 add_executable(motion_cycle motion_cycle.cpp)
 target_link_libraries(motion_cycle ${catkin_LIBRARIES})
 
-
+add_executable( img_loc_test img_loc_test.cpp )
+target_link_libraries( img_loc_test localization  ${DBoW3_LIBS} ${catkin_LIBRARIES})
 
 
 find_package(PCL REQUIRED)

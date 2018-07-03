@@ -1,32 +1,30 @@
 %YAML:1.0
-
-
 # the project directory 
 #project_dir: /home/robot/A_myProgram/localization
 
-
 # data
 # the images directory
-image_database_dir: /home/robot/A_myData/image_data_taozihu/tzh1711_5
+#image_database_dir: /home/robot/A_myData/follower_image127
+image_database_dir: /home/robot/a_myfile/image_data2/follower_image_map226
 
 # the database directory
-database_dir:/home/robot/A_myData/image_data_taozihu/tzh1711_5/database.yml.gz
+#database_dir:/home/robot/A_myData/follower_image127/database.yml.gz
+database_dir:/home/robot/a_myfile/image_data2/follower_image_map226/database.yml.gz
 
 # EntryId与frame_id_的对应关系
-db_frame_id_dir:/home/robot/A_myData/image_data_taozihu/tzh1711_5/db_frame_id_.txt 
+#db_frame_id_dir:/home/robot/A_myData/follower_image127/db_frame_id_.txt
+db_frame_id_dir:/home/robot/a_myfile/image_data2/follower_image_map226/db_frame_id_.txt
 
-
-image_query_dir: /home/robot/A_myData/image_query/taozihu1
+#image_query_dir: /home/robot/A_myData/image_query/taozihu1
+image_query_dir: /home/robot/a_myfile/image_data2/follower_image_map227
 
 # the vocabulary directory
 vocabulary_dir:/home/robot/A_myData/vocabulary/orbvoc.dbow3
-            
-
 
 capture_save_dir:/home/robot/A_myData/image_capture
 
 #the instance of Map directory
-map_dir:/home/robot/A_myData/map/map.yml
+#map_dir:/home/robot/A_myData/map/map.yml
 # camera intrinsics
 # fr1
 #camera.fx: 517.3
