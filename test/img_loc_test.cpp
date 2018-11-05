@@ -71,7 +71,7 @@ int main(int argc, char** argv)
     if ( argc != 2 )
     {
         cout<<"use default parameter_file!"<<endl;
-        parameter_file_dir ="~/hi_robot/src/localization_ros/config/default.yaml";
+        parameter_file_dir ="/home/robot/hi_robot/src/localization_ros/config/default.yaml";
         					
         //return 1;
         
@@ -100,7 +100,7 @@ int main(int argc, char** argv)
     cout<<"initialization complete. "<<endl;
 /*************/
     string image_query_dir = localization::Config::get<string> ( "image_query_dir" );
-    string dir_result_after_g2o(image_query_dir  + "/cldreg_res_after.g2o");
+    string dir_result_after_g2o(image_query_dir  + "/result_after.g2o");
     string dir_res(image_query_dir+"/res.txt");
     string dir_gth(image_query_dir+"/gth.txt");
     string dir_err(image_query_dir+"/err.txt");
@@ -138,11 +138,14 @@ int main(int argc, char** argv)
 				double_vec.push_back(num);
 				
 			image_retrieve.frame_query_=localization::Frame::createFrame();
-			image_retrieve.frame_query_->id_=double_vec[0];
-			string rgb_dir = image_query_dir+"/rgb/rgb"+to_string(double_vec[0])+".png";
-			string depth_dir = image_query_dir+"/depth/depth"+to_string(double_vec[0])+".png";     
+			
+			int frame_id= double_vec[0];
+			
+			image_retrieve.frame_query_->id_=frame_id;
+			string rgb_dir = image_query_dir+"/rgb/rgb"+to_string(frame_id)+".png";
+			string depth_dir = image_query_dir+"/depth/depth"+to_string(frame_id)+".png";     
 			image_retrieve.frame_query_->color_ = imread(rgb_dir);
-       		image_retrieve.frame_query_->depth_ = imread(depth_dir);
+       		//image_retrieve.frame_query_->depth_ = imread(depth_dir,-1);
 
 
 		
@@ -153,16 +156,16 @@ int main(int argc, char** argv)
 			Sophus::SE3 T1(q,t);
 			//frame->T_c_w_ = T.inverse();
 			
-			Sophus::SE3 Twc = T1.inverse();
+			//Sophus::SE3 Twc = T1.inverse();
 			
 			PoseResult pose_gth;							
-			pose_gth.x= Twc.matrix()(0,3);
-			pose_gth.y= Twc.matrix()(2,3);			
-			pose_gth.theta= acos(0.5*((Twc.matrix()(0,0)+Twc.matrix()(1,1)+Twc.matrix()(2,2))-1)) ;
+			pose_gth.x= T1.matrix()(0,3);
+			pose_gth.y= T1.matrix()(2,3);			
+			pose_gth.theta= acos(0.5*((T1.matrix()(0,0)+T1.matrix()(1,1)+T1.matrix()(2,2))-1)) ;
 			
 			fout_gth << pose_gth.x << ' ' << pose_gth.y << ' ' << pose_gth.theta << endl;//记录基准位姿
 						
-			cout<<"frame"<<image_retrieve.frame_query_->id_<<endl;
+			cout<<"frame"<<frame_id<<endl;
 		    image_retrieve.frame_query_->extractKeyPoints();
 		    image_retrieve.frame_query_->computeDescriptors();
 		    
@@ -184,13 +187,14 @@ int main(int argc, char** argv)
 					pose_result_vec.push_back(pose_result);
 					continue;
 				}
-				
+				/*
 				cout <<"result " << k 
 					 //<<" entry_id: " << image_retrieve.result_[k].Id 
 					 <<"   frame_id: " << pose_result.frame_id
 					 <<"   score: "  << pose_result.score 
 					 <<endl;
-			   
+			   */
+
 				//Mat K = ( Mat_<double> ( 3,3 ) << 525.0, 0, 319.5, 0, 525.0, 239.5, 0, 0, 1 );                 
 					            			 				
 				pose_estimation.curr_= image_retrieve.frame_query_;
@@ -203,7 +207,7 @@ int main(int argc, char** argv)
 				}
 						
 				Sophus::SE3 Twc = pose_estimation.T_c_w_estimated_.inverse();			
-				cout <<"Twc"<<endl<<Twc.matrix() << endl <<endl <<endl;	
+				//cout <<"Twc"<<endl<<Twc.matrix() << endl <<endl <<endl;	
 					
 				pose_result.x= Twc.matrix()(0,3);
 				pose_result.y= Twc.matrix()(2,3);			
@@ -226,7 +230,7 @@ int main(int argc, char** argv)
 			//选出距离最近的两个结果,数据量不多暂且这样筛选数据
 			int index_1(0),index_2(1);
 			double min_dist(100.0);			
-			if(num_good_pose >=3)
+			if(num_good_pose >=2)
 			{
 				struct dist_ 
 				{

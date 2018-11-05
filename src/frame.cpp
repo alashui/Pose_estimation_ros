@@ -54,6 +54,9 @@ double Frame::findDepth ( const cv::KeyPoint& kp )
     int x = cvRound(kp.pt.x);
     int y = cvRound(kp.pt.y);
     ushort d = depth_.ptr<ushort>(y)[x];
+
+    //cout << d<<endl;
+
     if ( d!=0 )
     {    	
 		return double(d)/camera_->depth_scale_;

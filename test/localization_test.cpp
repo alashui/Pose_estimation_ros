@@ -244,7 +244,7 @@ int main(int argc, char** argv)
 					}       
 			    } dist;
 			    
-				if(num_good_pose =2)
+				if(num_good_pose ==2)
 					min_dist=dist(good_pose_vec[index_1], good_pose_vec[index_2]);
 					
 				else 

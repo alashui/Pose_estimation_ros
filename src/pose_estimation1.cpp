@@ -12,9 +12,7 @@ namespace localization
 {
 
 PoseEstimation::PoseEstimation() :
-						state_ ( INITIALIZING ),curr_ ( nullptr ),ref_ ( nullptr ),     								     								 
-						map_ ( new Map ),num_lost_ ( 0 ), num_inliers_ ( 0 ),     								
-						matcher_flann_ ( new cv::flann::LshIndexParams ( 5,10,2 ) )
+    state_ ( INITIALIZING ), ref_ ( nullptr ), curr_ ( nullptr ), map_ ( new Map ), num_lost_ ( 0 ), num_inliers_ ( 0 ), matcher_flann_ ( new cv::flann::LshIndexParams ( 5,10,2 ) )
 {
 
     match_ratio_        = Config::get<float> ( "match_ratio" );
@@ -32,34 +30,14 @@ PoseEstimation::~PoseEstimation(){}
 bool PoseEstimation::featureMatching( const Frame::Ptr frame_curr,
 									  const Frame::Ptr frame_ref   )
 {
-    boost::timer timer;
-    map_->map_points_.clear();	//清除地图点 
-               
-	for ( size_t i=0; i < frame_ref->keypoints_.size(); i++ )   //特征点是500个，计算参考帧上产生的地图点
-	{
-		
-	    double d = frame_ref->findDepth ( frame_ref->keypoints_[i] );
-		//cout << d<<endl;
-	    if ( d <= 0.0 || d >5.0) 
-	        continue;
-	    Vector3d p_world = frame_ref->camera_->pixel2world (
-	    	Vector2d ( frame_ref->keypoints_[i].pt.x, frame_ref->keypoints_[i].pt.y ), 
-	    		frame_ref->T_c_w_, d   );
-
-	                  
-	    Vector3d n;// = p_world - pose_estimation.ref_->getCamCenter();
-	    n.normalize();
-	    MapPoint::Ptr map_point =localization::MapPoint::createMapPoint(  p_world, n,
-	      				 frame_ref->descriptors_.row(i).clone(), frame_ref.get()    );
-	    map_->insertMapPoint( map_point ); 
-	    							//计算这一参考帧产生的地图点,其实跟地图没有关系,只是计算它的三维点						
-	}	    
-
+    boost::timer timer;   
     vector<cv::DMatch> matches;
               
     // select the candidates in map 
     Mat desp_map;
     vector<MapPoint::Ptr> candidate;  
+
+    //cout <<"map_size: "<<map_->map_points_.size()<<endl;
     for ( auto& allpoints: map_->map_points_ )  //筛选出属于参考帧的地图点
     {
         MapPoint::Ptr& p = allpoints.second; 
@@ -71,13 +49,13 @@ bool PoseEstimation::featureMatching( const Frame::Ptr frame_curr,
             p->visible_times_++;    
             candidate.push_back( p );   
             desp_map.push_back( p->descriptor_ );
-                     
         }
     }
-                             
-    matcher_flann_.match ( desp_map, frame_curr->descriptors_, matches ); 
 
-      
+    //cout <<"size of desp_map and candiate: "<<desp_map.size()<< " " <<candidate.size()<<endl;          
+    matcher_flann_.match ( desp_map, frame_curr->descriptors_, matches ); 
+    //cout <<"size of matches "<<matches.size()<<endl;
+
 	if ( matches.size() < 10)     
 	{	
 		cout<< "matches too small:" <<matches.size()<<endl;
@@ -105,12 +83,12 @@ bool PoseEstimation::featureMatching( const Frame::Ptr frame_curr,
 
     if(match_3dpts_.size() <10)
 	{
-		//cout<<"good matches too small: "<< match_3dpts_.size() <<endl;
+		cout<<"good matches too small: "<< match_3dpts_.size() <<endl;
 		return 0;			
 	}
 
-    //cout<<"good matches: "<<match_3dpts_.size() <<endl;
-    //cout<<"match cost time: "<<timer.elapsed() <<endl;
+    cout<<"good matches: "<<match_3dpts_.size() <<endl;
+    cout<<"match cost time: "<<timer.elapsed() <<endl;
 }
 
 void PoseEstimation::poseEstimationPnP()
@@ -139,7 +117,7 @@ void PoseEstimation::poseEstimationPnP()
     
     
     num_inliers_ = inliers.rows;
-    //cout<<"pnp inliers: "<<num_inliers_<<endl;
+    cout<<"pnp inliers: "<<num_inliers_<<endl;
     T_c_w_estimated_ = SE3 (
                            SO3 ( rvec.at<double> ( 0,0 ), rvec.at<double> ( 1,0 ), rvec.at<double> ( 2,0 ) ),
                            Vector3d ( tvec.at<double> ( 0,0 ), tvec.at<double> ( 1,0 ), tvec.at<double> ( 2,0 ) )
@@ -171,7 +149,7 @@ void PoseEstimation::poseEstimationPnP()
 		    EdgeProjectXYZ2UVPoseOnly* edge = new EdgeProjectXYZ2UVPoseOnly();
 		    edge->setId ( i );
 		    edge->setVertex ( 0, pose );
-		    edge->camera_ = ref_->camera_.get();
+		    edge->camera_ = curr_->camera_.get();
 		    edge->point_ = Vector3d ( pts3d[index].x, pts3d[index].y, pts3d[index].z );
 		    edge->setMeasurement ( Vector2d ( pts2d[index].x, pts2d[index].y ) );
 		    edge->setInformation ( Eigen::Matrix2d::Identity() );
@@ -201,7 +179,7 @@ bool PoseEstimation::checkEstimatedPose()
     // check if the estimated pose is good
     if ( num_inliers_ < min_inliers_ )
     {
-        //cout<<"reject because inlier is too small: "<<num_inliers_<<endl;
+        cout<<"reject because inlier is too small: "<<num_inliers_<<endl;
         return false;
     }
     // if the motion is too large, it is probably wrong
@@ -209,7 +187,7 @@ bool PoseEstimation::checkEstimatedPose()
     Sophus::Vector6d d = T_r_c.log();
     if ( d.norm() > 5.0 )
     {
-        //cout<<"reject because motion is too large: "<<d.norm() <<endl;
+        cout<<"reject because motion is too large: "<<d.norm() <<endl;
         return false;
     }
     return true;
@@ -265,10 +243,10 @@ double PoseEstimation::getViewAngle ( Frame::Ptr frame, MapPoint::Ptr point )
     return acos( n.transpose()*point->norm_ );
 }
 
-/*
 void PoseEstimation::mapInitialization()  //根据pose.txt文件生成一个Map实例
 {
-
+    //string map_dir = localization::Config::get<string> ( "map_dir" );
+	//map_->load(map_dir);
 	cout<<"initializing map "<<endl;
 	if(map_->state_==Map::EMPTY)
 	{
@@ -276,7 +254,7 @@ void PoseEstimation::mapInitialization()  //根据pose.txt文件生成一个Map�
 		string dir_pose(image_database_dir +  "/pose.txt");				
 
 	    ifstream fin(dir_pose);	    	//数据格式:frame_id              double[12]
-	    								//(数字1,2,3,...)对应帧id ;	R(3x3) t(3x1) 表示该帧的相机位姿     
+	    								//		(数字1,2,3,...)对应帧id ;	R(3x3) t(3x1) 表示该帧的相机位姿     
 		if (!fin)								
 		{
 		    cerr<<"cannot find pose file"<<endl;
@@ -319,75 +297,33 @@ void PoseEstimation::mapInitialization()  //根据pose.txt文件生成一个Map�
 				//frame_ptr_vec.push_back(frame);
 				map_->insertKeyFrame ( frame );																
 		   }
+		   
+		/*
+		   Frame::Ptr frame_cur,frame_ref;
+		   for (Frame::Ptr frame : frame_ptr_vec)
+		   {
+
+		   		if(map_->state_==Map::EMPTY)
+		   		{
+		   			map_->addKeyFrame(frame);	//第一帧,添加所有关键点为地图点(函数addKeyFrame有处理)
+		   			map_->state_=Map::EXIST;
+		   			frame_cur=frame_ref=frame;
+		   		}
+		   		else
+		   		{		   	
+					frame_cur=frame;
+		   			featureMatching(frame_cur, frame_ref);
+
+		   			map_->addKeyFrame(frame);
+		   			map_->addMapPoints( frame,match_2dkp_index_);
+		   		}
+		   		
+		   }*/		   
 		}           	
 	}
 	cout<<"map initialization completed."<<endl;	
 }
-*/
 
-//通过result_after.g2o文件生成pose.txt文件
-void PoseEstimation::mapInitialization()  //根据result_after.g2o文件生成一个Map实例(关键帧序列及其对应位姿)
-{
-
-	cout<<"initializing map "<<endl;
-	if(map_->state_==Map::EMPTY)
-	{
-		string image_database_dir = Config::get<string> ( "image_database_dir" );
-		string dir_result_after_g2o(image_database_dir + "/result_after.g2o");
-
-		ifstream fin(dir_result_after_g2o);	 
-		if (!fin)								
-		{
-			cerr<<"cannot find result_after.g2o file"<<endl;
-				//return 1;
-		}
-		else//文件存在
-		{
-
-			string temp;	
-			int num_line=0;
-			while(getline(fin,temp))		//获取一行,一行数据格式为  VERTEX_SE3:QUAT 1   0 0 0 0 0 0 1  
-												//八位数字分别表示 x y z qx qy qz qw(前三位为位置，后四位为四元数表示的旋转角)
-			{	
-				//对每一行数据的读入
-				num_line++;
-				if (num_line==2)	//忽略第二行 数据为 FIX 1
-					continue;
-				string temp_str;  //忽略每行前面的字符串 VERTEX_SE3:QUAT
-				vector<double> double_vec; 
-				double num;
-				istringstream iss(temp);
-				iss >> temp_str;
-				if (temp_str!="VERTEX_SE3:QUAT") break;  	
-					
-				while(iss >> num)  		//分别将这一行数据读入						
-					double_vec.push_back(num);
-					
-				Frame::Ptr frame(new Frame());
-				frame->id_=double_vec[0];
-				string rgb_dir = image_database_dir+"/rgb/rgb"+to_string(frame->id_)+".png";
-				string depth_dir = image_database_dir+"/depth/depth"+to_string(frame->id_)+".png";     
-				frame->color_ = imread(rgb_dir);
-	       		frame->depth_ = imread(depth_dir,-1);
-
-  				cout<<"frame"<<frame->id_<<endl;
-				frame->extractKeyPoints();
-				frame->computeDescriptors();
-			
-					//将x y z q1 q2 q3 q4 转换为sophus::se3 表示
-				Eigen::Vector3d t(double_vec[1],double_vec[2],double_vec[3]);
-				Eigen::Quaterniond q(double_vec[7],double_vec[4],double_vec[5],double_vec[6]);
-												//Eigen::Quaterniond里使用顺序qw qx qy qz 
-				Sophus::SE3 T(q,t);
-				frame->T_c_w_ = T.inverse();
-				//frame->T_c_w_ = T;				
-
-				map_->insertKeyFrame ( frame );	
-   			}
-		} 
-	}
-	cout<<"map initialization completed."<<endl;	
-}
 
 
 }
